@@ -218,6 +218,10 @@ func pageUp(g *gocui.Gui, v *gocui.View) error {
 
 func pageDown(g *gocui.Gui, v *gocui.View) error {
 	_, vSizeY := v.Size()
+	// end of results
+	if len(v2Meta) < vSizeY-1 {
+		return nil
+	}
 	CurrOffset += vSizeY
 	refresh(g, v)
 	refreshV3(g, v)
