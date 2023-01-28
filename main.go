@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/awesome-gocui/gocui"
+	"github.com/joho/godotenv"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -84,7 +85,11 @@ func GetGormConnection() *gorm.DB {
 		},
 	)
 
-	dsn := "jeremy:jeremy@tcp(127.0.0.1:3306)/nono?charset=utf8mb4&parseTime=True&loc=UTC"
+	dsn, foundDsn := os.LookupEnv("DB")
+	if !foundDsn {
+		panic("DB not found in env, aborting (see env.example)")
+	}
+
 	db, dberr := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: newLogger})
 	if dberr != nil {
 		panic("failed to connect database")
@@ -97,6 +102,11 @@ func GetGormConnection() *gorm.DB {
 var ViewDB *gorm.DB
 
 func main() {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
 	ctx := context.Background()
 
@@ -113,13 +123,13 @@ func main() {
 	// connect to relay(s)
 	DB.Exec("delete from relay_statuses")
 	relayUrls := []string{
-		//"wss://relay.snort.social",
-		//"wss://relay.damus.io",
-		//"wss://nostr.zebedee.cloud",
-		//"wss://eden.nostr.land",
-		//"wss://nostr-pub.wellorder.net",
+		"wss://relay.snort.social",
+		"wss://relay.damus.io",
+		"wss://nostr.zebedee.cloud",
+		"wss://eden.nostr.land",
+		"wss://nostr-pub.wellorder.net",
 		"wss://nostr-dev.wellorder.net",
-		//"wss://relay.nostr.info",
+		"wss://relay.nostr.info",
 	}
 
 	for _, url := range relayUrls {

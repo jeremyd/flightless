@@ -12,7 +12,12 @@ import (
 )
 
 func keybindings(g *gocui.Gui) error {
-	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
+	//if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
+	//	log.Panicln(err)
+	//}
+
+	// q key (quit)
+	if err := g.SetKeybinding("", rune(0x71), gocui.ModNone, quit); err != nil {
 		log.Panicln(err)
 	}
 	// s key (search)
@@ -115,8 +120,8 @@ func layout(g *gocui.Gui) error {
 		v.FgColor = useFg
 		v.FrameColor = useFrame
 		fmt.Fprint(v, "(s)earch\n")
+		fmt.Fprint(v, "(q)uit\n")
 		fmt.Fprint(v, "(F5) refresh\n")
-		fmt.Fprint(v, "(CTRL-C) quit\n")
 	}
 
 	return nil
