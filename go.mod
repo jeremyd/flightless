@@ -31,3 +31,5 @@ require (
 )
 
 replace github.com/nbd-wtf/go-nostr => ../go-nostr
+
+replace github.com/jeremyd/nono => ./
