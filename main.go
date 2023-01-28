@@ -322,7 +322,6 @@ func main() {
 	// relay status messages
 	go func() {
 		for {
-			time.Sleep(1 * time.Second)
 			var RelayStatuses []RelayStatus
 			DB.Find(&RelayStatuses)
 			g.Update(func(g *gocui.Gui) error {
@@ -345,6 +344,7 @@ func main() {
 				}
 				return nil
 			})
+			time.Sleep(1 * time.Second)
 		}
 	}()
 
@@ -383,6 +383,7 @@ func layout(g *gocui.Gui) error {
 	//useBg := gocui.Attribute(tcell.ColorSlateBlue)
 	useBg := gocui.NewRGBColor(0, 0, 200)
 	useFg := gocui.Attribute(tcell.ColorWhite)
+	useFrame := gocui.NewRGBColor(200, 200, 200)
 	maxX, maxY := g.Size()
 	if v, err := g.SetView("v1", -1, -1, maxX, 1, 0); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -406,7 +407,7 @@ func layout(g *gocui.Gui) error {
 		v.Autoscroll = false
 		v.BgColor = useBg
 		v.FgColor = useFg
-		v.FrameColor = useBg
+		v.FrameColor = useFrame
 
 		v, _ := g.View("v2")
 		refresh(g, v)
@@ -421,7 +422,7 @@ func layout(g *gocui.Gui) error {
 		v.Autoscroll = false
 		v.BgColor = useBg
 		v.FgColor = useFg
-		v.FrameColor = useBg
+		v.FrameColor = useFrame
 	}
 
 	if v, err := g.SetView("v4", maxX-29, 1, maxX-1, maxY-6, 4); err != nil {
@@ -434,7 +435,7 @@ func layout(g *gocui.Gui) error {
 		v.Autoscroll = false
 		v.BgColor = useBg
 		v.FgColor = useFg
-		v.FrameColor = useBg
+		v.FrameColor = useFrame
 	}
 
 	if v, err := g.SetView("v5", 0, maxY-6, maxX-1, maxY-1, 1); err != nil {
@@ -446,9 +447,10 @@ func layout(g *gocui.Gui) error {
 		v.Frame = true
 		v.BgColor = useBg
 		v.FgColor = useFg
-		v.FrameColor = useBg
+		v.FrameColor = useFrame
 		fmt.Fprint(v, "<TAB> next window\n")
-		fmt.Fprint(v, "<F5> refresh")
+		fmt.Fprint(v, "<F5> refresh\n")
+		fmt.Fprint(v, "</> search\n")
 	}
 
 	return nil
