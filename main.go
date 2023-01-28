@@ -344,7 +344,7 @@ func main() {
 				}
 				return nil
 			})
-			time.Sleep(1 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
 	}()
 
@@ -497,13 +497,27 @@ func doSearch(g *gocui.Gui, v *gocui.View) error {
 }
 
 func quit(g *gocui.Gui, v *gocui.View) error {
-	v4, _ := g.View("v4")
-	fmt.Fprint(v4, "Closing Connections..")
 	syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+	go func() {
+		g.Update(func(g *gocui.Gui) error {
+			v, err := g.View("v5")
+			if err != nil {
+				// handle error
+				fmt.Println("error getting view")
+			}
+			v.Clear()
+			fmt.Fprintln(v, "Closing connections and exiting..")
+			return nil
+		})
+		time.Sleep(time.Second * 4)
+
+		g.Update(func(g *gocui.Gui) error {
+			return gocui.ErrQuit
+		})
+	}()
 	// give the relays time to close their connections
-	time.Sleep(time.Second * 4)
-	//return nil
-	return gocui.ErrQuit
+	return nil
+	//return gocui.ErrQuit
 }
 
 var v2Meta []Metadata
