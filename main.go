@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -112,7 +113,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		fmt.Println("exiting gracefully")
+		//fmt.Println("exiting gracefully")
 		sub.Unsub()
 		relay.Close()
 		// give other relays time to close
@@ -262,10 +263,10 @@ func get_gorm_connection() *gorm.DB {
 	newLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
 		logger.Config{
-			SlowThreshold:             time.Second,  // Slow SQL threshold
-			LogLevel:                  logger.Error, // Log level
-			IgnoreRecordNotFoundError: true,         // Ignore ErrRecordNotFound error for logger
-			Colorful:                  false,        // Disable color
+			SlowThreshold:             time.Second,   // Slow SQL threshold
+			LogLevel:                  logger.Silent, // Log level
+			IgnoreRecordNotFoundError: true,          // Ignore ErrRecordNotFound error for logger
+			Colorful:                  false,         // Disable color
 		},
 	)
 
@@ -277,11 +278,6 @@ func get_gorm_connection() *gorm.DB {
 	db.Logger.LogMode(logger.Silent)
 
 	return db
-}
-
-func close_gorm_commection(db *gorm.DB) {
-	sqlDB, _ := db.DB()
-	sqlDB.Close()
 }
 
 func main() {
@@ -296,6 +292,7 @@ func main() {
 	ctx, _ := context.WithCancel(context.Background())
 
 	// connect to relay(s)
+	DB.Exec("delete from relay_statuses")
 	relayUrls := []string{
 		//"wss://relay.snort.social",
 		//"wss://relay.damus.io",
@@ -367,7 +364,11 @@ func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
 		log.Panicln(err)
 	}
-	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, nextView); err != nil {
+	// s key (search)
+	if err := g.SetKeybinding("v2", rune(0x73), gocui.ModNone, search); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, search); err != nil {
 		log.Panicln(err)
 	}
 	if err := g.SetKeybinding("v2", gocui.KeyArrowDown, gocui.ModNone, cursorDown); err != nil {
@@ -383,6 +384,9 @@ func keybindings(g *gocui.Gui) error {
 		log.Panicln(err)
 	}
 	if err := g.SetKeybinding("", gocui.KeyPgdn, gocui.ModNone, pageDown); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("msg", gocui.KeyEnter, gocui.ModNone, doSearch); err != nil {
 		log.Panicln(err)
 	}
 	return nil
@@ -417,8 +421,8 @@ func layout(g *gocui.Gui) error {
 		v.BgColor = useBg
 		v.FgColor = useFg
 		v.FrameColor = useFrame
+		v.Editable = false
 		refresh(g, v)
-
 	}
 
 	if v, err := g.SetView("v3", 0, maxY-21, maxX-20, maxY-6, 1); err != nil {
@@ -431,6 +435,7 @@ func layout(g *gocui.Gui) error {
 		v.BgColor = useBg
 		v.FgColor = useFg
 		v.FrameColor = useFrame
+		v.Editable = false
 		refreshV3(g, v)
 	}
 
@@ -457,32 +462,52 @@ func layout(g *gocui.Gui) error {
 		v.BgColor = useBg
 		v.FgColor = useFg
 		v.FrameColor = useFrame
-		fmt.Fprint(v, "<TAB> next window\n")
-		fmt.Fprint(v, "<F5> refresh\n")
-		fmt.Fprint(v, "</> search\n")
+		fmt.Fprint(v, "(s)earch\n")
+		fmt.Fprint(v, "(F5) refresh\n")
+		fmt.Fprint(v, "(CTRL-C) quit\n")
 	}
 
 	return nil
 }
 
-func nextView(g *gocui.Gui, v *gocui.View) error {
-	//nextIndex := (active + 1) % len(viewArr)
-	//name := viewArr[nextIndex]
-	name := "v2"
-
-	if _, err := g.SetCurrentView(name); err != nil {
-		return err
+func search(g *gocui.Gui, v *gocui.View) error {
+	maxX, maxY := g.Size()
+	if v, err := g.SetView("msg", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2, 0); err != nil {
+		if !errors.Is(err, gocui.ErrUnknownView) {
+			return err
+		}
+		if _, err := g.SetCurrentView("msg"); err != nil {
+			return err
+		}
+		v.Title = "Search"
+		v.Editable = true
+		v.KeybindOnEdit = true
 	}
+	return nil
+}
 
-	active = 2
+func doSearch(g *gocui.Gui, v *gocui.View) error {
+	msg, _ := g.View("msg")
+	searchTerm = "%" + msg.Buffer() + "%"
+	g.DeleteView("msg")
+	CurrOffset = 0
+	refresh(g, v)
+	refreshV3(g, v)
 	return nil
 }
 
 func quit(g *gocui.Gui, v *gocui.View) error {
+	v4, _ := g.View("v4")
+	fmt.Fprint(v4, "Closing Connections..")
+	syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+	// give the relays time to close their connections
+	time.Sleep(time.Second * 4)
+	//return nil
 	return gocui.ErrQuit
 }
 
 var v2Meta []Metadata
+var searchTerm = ""
 
 func refresh(g *gocui.Gui, v *gocui.View) error {
 	g.SetCurrentView("v2")
@@ -493,7 +518,12 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 
 	_, vY := v.Size()
 
-	DB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name != ?", "")
+	if searchTerm != "" {
+		DB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name like ? or nip05 like ?", searchTerm, searchTerm)
+	} else {
+		DB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name != ?", "")
+
+	}
 	//DB.Limit(vY-1).Find(&v2Meta, "name != ?", "")
 
 	v.Clear()
@@ -520,6 +550,7 @@ func pageUp(g *gocui.Gui, v *gocui.View) error {
 	}
 	CurrOffset -= vSizeY
 	refresh(g, v)
+	refreshV3(g, v)
 	return nil
 }
 
@@ -527,6 +558,7 @@ func pageDown(g *gocui.Gui, v *gocui.View) error {
 	_, vSizeY := v.Size()
 	CurrOffset += vSizeY
 	refresh(g, v)
+	refreshV3(g, v)
 	return nil
 }
 
@@ -538,6 +570,10 @@ func cursorDown(g *gocui.Gui, v *gocui.View) error {
 			// end of page
 			CurrOffset += vSizeY
 			refresh(g, v)
+			return nil
+		}
+		if (cy + 1) >= len(v2Meta) {
+			// end of list
 			return nil
 		}
 		if err := v.SetCursor(cx, cy+1); err != nil {
