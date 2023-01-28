@@ -514,6 +514,10 @@ var CurrOffset = 0
 
 func pageUp(g *gocui.Gui, v *gocui.View) error {
 	_, vSizeY := v.Size()
+	if CurrOffset <= 0 {
+		CurrOffset = 0
+		return nil
+	}
 	CurrOffset -= vSizeY
 	refresh(g, v)
 	return nil
