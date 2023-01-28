@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/awesome-gocui/gocui"
+	tcell "github.com/gdamore/tcell/v2"
 	"github.com/nbd-wtf/go-nostr"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -49,6 +51,11 @@ type GormErr struct {
 	Number  int    `json:"Number"`
 	Message string `json:"Message"`
 }
+
+var (
+	viewArr = []string{"v1", "v2", "v3", "v4", "v5"}
+	active  = 0
+)
 
 func checkAndReportGormError(err error, allowErrors []string) bool {
 	if err != nil {
@@ -97,7 +104,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 
 	go func() {
 		<-sub.EndOfStoredEvents
-		fmt.Printf("got EOSE from %s\n", relay.URL)
+		//fmt.Printf("got EOSE from %s\n", relay.URL)
 	}()
 
 	c := make(chan os.Signal)
@@ -119,31 +126,31 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				m := Metadata{}
 				err := json.Unmarshal([]byte(ev.Content), &m)
 				if err != nil {
-					fmt.Println(err)
+					//fmt.Println(err)
 				}
 				m.PubkeyHex = ev.PubKey
 				if len(m.Picture) > 65535 {
-					fmt.Println("dumbass put too big a picture, skipping")
+					//fmt.Println("dumbass put too big a picture, skipping")
 					continue
 				}
 				rowsUpdated := db.Model(Metadata{}).Where("pubkey_hex = ?", m.PubkeyHex).Updates(&m).RowsAffected
 				if rowsUpdated == 0 {
 					err := db.Save(&m).Error
 					if err != nil {
-						fmt.Println(err)
+						//fmt.Println(err)
 					}
-					fmt.Printf("Created metadata for %s, %s\n", m.Name, m.Nip05)
+					//fmt.Printf("Created metadata for %s, %s\n", m.Name, m.Nip05)
 				} else {
-					fmt.Printf("Updated metadata for %s, %s\n", m.Name, m.Nip05)
+					//fmt.Printf("Updated metadata for %s, %s\n", m.Name, m.Nip05)
 				}
 			} else if ev.Kind == 2 {
 				// recommend relay
-				fmt.Println("FOUND TYPE 2!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+				//fmt.Println("FOUND TYPE 2!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 				var servers []RecommendServer
 				db.Find(&servers, "pubkey_hex = ? and url = ? and recommended_by = ?", ev.PubKey, ev.Content, ev.PubKey)
 				if len(servers) > 0 {
 					// already recommended, update time fields?
-					fmt.Println("already recommended, skip")
+					//fmt.Println("already recommended, skip")
 				} else {
 					// add to recommended servers
 					db.Create(&RecommendServer{
@@ -159,13 +166,13 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				var person Metadata
 				notFoundError := db.First(&person, "pubkey_hex = ?", ev.PubKey).Error
 				if notFoundError != nil {
-					fmt.Printf("Creating blank metadata for %s\n", ev.PubKey)
+					//fmt.Printf("Creating blank metadata for %s\n", ev.PubKey)
 					person = Metadata{
 						PubkeyHex: ev.PubKey,
 					}
 					db.Create(&person)
 				} else {
-					fmt.Printf("updating (%d) follows for %s: %s\n", len(allPTags), person.Name, person.PubkeyHex)
+					//fmt.Printf("updating (%d) follows for %s: %s\n", len(allPTags), person.Name, person.PubkeyHex)
 				}
 
 				// purge followers that have been 'unfollowed'
@@ -200,7 +207,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 						}
 						createNewErr := db.Omit("Follows").Create(&newUser).Error
 						if createNewErr != nil {
-							fmt.Println("Error creating user for follow: ", createNewErr)
+							//fmt.Println("Error creating user for follow: ", createNewErr)
 						}
 						// use gorm insert statement to update the join table
 						errExec := db.Exec("insert ignore into metadata_follows (metadata_pubkey_hex, follow_pubkey_hex) values (?, ?)", person.PubkeyHex, newUser.PubkeyHex).Error
@@ -233,11 +240,11 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 	go func() {
 		for cErr := range relay.ConnectionError {
 			if cErr != nil {
-				fmt.Printf("relay: %s connection error: %s\n", relay.URL, cErr)
+				//fmt.Printf("relay: %s connection error: %s\n", relay.URL, cErr)
 				updateOrCreateRelayStatus(db, relay.URL, "connection error: "+cErr.Error())
 				// attempt a re-connection
 				time.Sleep(60 * time.Second)
-				fmt.Printf("reconnecting to %s\n", relay.URL)
+				//fmt.Printf("reconnecting to %s\n", relay.URL)
 				updateOrCreateRelayStatus(db, relay.URL, "reconnecting")
 				doRelay(db, ctx, relay.URL)
 			}
@@ -246,7 +253,9 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 	return true
 }
 
-func main() {
+var DB *gorm.DB
+
+func get_gorm_connection() *gorm.DB {
 	newLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
 		logger.Config{
@@ -259,14 +268,24 @@ func main() {
 
 	dsn := "jeremy:jeremy@tcp(127.0.0.1:3306)/nono?charset=utf8mb4&parseTime=True&loc=UTC"
 	db, dberr := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: newLogger})
-	db.Logger.LogMode(logger.Silent)
 	if dberr != nil {
 		panic("failed to connect database")
 	}
+	db.Logger.LogMode(logger.Silent)
 
-	migrateErr := db.AutoMigrate(&Metadata{})
-	migrateErr2 := db.AutoMigrate(&RelayStatus{})
-	migrateErr3 := db.AutoMigrate(&RecommendServer{})
+	return db
+}
+
+func close_gorm_commection(db *gorm.DB) {
+	sqlDB, _ := db.DB()
+	sqlDB.Close()
+}
+
+func main() {
+	DB = get_gorm_connection()
+	migrateErr := DB.AutoMigrate(&Metadata{})
+	migrateErr2 := DB.AutoMigrate(&RelayStatus{})
+	migrateErr3 := DB.AutoMigrate(&RecommendServer{})
 	if migrateErr != nil || migrateErr2 != nil || migrateErr3 != nil {
 		panic("one or more migrations failed, aborting")
 	}
@@ -275,21 +294,274 @@ func main() {
 
 	// connect to relay(s)
 	relayUrls := []string{
-		"wss://relay.snort.social",
-		"wss://relay.damus.io",
-		"wss://nostr.zebedee.cloud",
-		"wss://eden.nostr.land",
-		"wss://nostr-pub.wellorder.net",
+		//"wss://relay.snort.social",
+		//"wss://relay.damus.io",
+		//"wss://nostr.zebedee.cloud",
+		//"wss://eden.nostr.land",
+		//"wss://nostr-pub.wellorder.net",
 		"wss://nostr-dev.wellorder.net",
-		"wss://relay.nostr.info",
+		//"wss://relay.nostr.info",
 	}
 
 	for _, url := range relayUrls {
-		doRelay(db, ctx, url)
+		doRelay(DB, ctx, url)
 	}
 
-	for {
-		time.Sleep(5 * time.Second)
+	g, err := gocui.NewGui(gocui.OutputTrue, true)
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer g.Close()
+
+	g.SetManagerFunc(layout)
+	//g.Cursor = true
+	if err := keybindings(g); err != nil {
+		log.Panicln(err)
 	}
 
+	// relay status messages
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			var RelayStatuses []RelayStatus
+			DB.Find(&RelayStatuses)
+			g.Update(func(g *gocui.Gui) error {
+				v, err := g.View("v4")
+				if err != nil {
+					// handle error
+					fmt.Println("error getting view")
+				}
+				v.Clear()
+				for _, relayStatus := range RelayStatuses {
+
+					var shortStatus string
+					if relayStatus.Status == "connection established" {
+						shortStatus = "✅"
+					} else {
+						shortStatus = "❌"
+					}
+
+					fmt.Fprintf(v, "%s %s\n", shortStatus, relayStatus.Url)
+				}
+				return nil
+			})
+		}
+	}()
+
+	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
+		log.Panicln(err)
+	}
+
+	/*
+		for {
+			time.Sleep(5 * time.Second)
+		}
+	*/
+
+}
+
+func keybindings(g *gocui.Gui) error {
+	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, nextView); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("v2", gocui.KeyArrowDown, gocui.ModNone, cursorDown); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("v2", gocui.KeyArrowUp, gocui.ModNone, cursorUp); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("", gocui.KeyF5, gocui.ModNone, refresh); err != nil {
+		log.Panicln(err)
+	}
+	return nil
+}
+
+func layout(g *gocui.Gui) error {
+	//useBg := gocui.Attribute(tcell.ColorSlateBlue)
+	useBg := gocui.NewRGBColor(0, 0, 200)
+	useFg := gocui.Attribute(tcell.ColorWhite)
+	maxX, maxY := g.Size()
+	if v, err := g.SetView("v1", -1, -1, maxX, 1, 0); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Editable = false
+		v.Wrap = false
+		v.Frame = false
+		v.BgColor = useBg
+		v.FgColor = useFg
+		fmt.Fprint(v, "NoGo v0.0.1")
+	}
+
+	if v, err := g.SetView("v2", 0, 1, maxX-20, maxY-20, 0); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		//myTitle := fmt.Sprintf("%-30s %-30s \n", "Name", "Nip05")
+		//v.Title = "Profiles"
+		v.Wrap = false
+		v.Autoscroll = false
+		v.BgColor = useBg
+		v.FgColor = useFg
+		v.FrameColor = useBg
+
+		v, _ := g.View("v2")
+		refresh(g, v)
+	}
+
+	if v, err := g.SetView("v3", 0, maxY-21, maxX-20, maxY-6, 1); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		//v.Title = "Details"
+		v.Wrap = true
+		v.Autoscroll = false
+		v.BgColor = useBg
+		v.FgColor = useFg
+		v.FrameColor = useBg
+	}
+
+	if v, err := g.SetView("v4", maxX-29, 1, maxX-1, maxY-6, 4); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "Status"
+		v.Editable = false
+		v.Wrap = true
+		v.Autoscroll = false
+		v.BgColor = useBg
+		v.FgColor = useFg
+		v.FrameColor = useBg
+	}
+
+	if v, err := g.SetView("v5", 0, maxY-6, maxX-1, maxY-1, 1); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		v.Title = "Keybinds"
+		v.Editable = false
+		v.Frame = true
+		v.BgColor = useBg
+		v.FgColor = useFg
+		v.FrameColor = useBg
+		fmt.Fprint(v, "<TAB> next window\n")
+		fmt.Fprint(v, "<F5> refresh")
+	}
+
+	return nil
+}
+
+func nextView(g *gocui.Gui, v *gocui.View) error {
+	nextIndex := (active + 1) % len(viewArr)
+	name := viewArr[nextIndex]
+
+	if _, err := g.SetCurrentView(name); err != nil {
+		return err
+	}
+
+	active = nextIndex
+	return nil
+}
+
+func quit(g *gocui.Gui, v *gocui.View) error {
+	return gocui.ErrQuit
+}
+
+var v2Meta []Metadata
+
+func refresh(g *gocui.Gui, v *gocui.View) error {
+	g.SetCurrentView("v2")
+	v, err := g.View("v2")
+	if err != nil {
+		fmt.Println("error getting view")
+	}
+
+	_, vY := v.Size()
+	DB.Limit(vY-1).Find(&v2Meta, "name != ?", "")
+	for _, metadata := range v2Meta {
+		if metadata.Nip05 != "" {
+			fmt.Fprintf(v, "%-30s %-30s \n", metadata.Name, metadata.Nip05)
+		} else {
+			fmt.Fprintf(v, "%-30s\n", metadata.Name)
+		}
+	}
+	v.Highlight = true
+	v.SelBgColor = gocui.ColorCyan
+	v.SelFgColor = gocui.ColorBlack
+	return nil
+}
+
+func cursorDown(g *gocui.Gui, v *gocui.View) error {
+	if v != nil {
+		cx, cy := v.Cursor()
+		_, vSizeY := v.Size()
+		if (cy + 1) >= (vSizeY - 1) {
+			return nil
+		}
+		if err := v.SetCursor(cx, cy+1); err != nil {
+			ox, oy := v.Origin()
+			if err := v.SetOrigin(ox, oy+1); err != nil {
+				return err
+			}
+		}
+		var err error
+
+		_, newCy := v.Cursor()
+
+		v, err := g.View("v3")
+		if err != nil {
+			// handle error
+			fmt.Println("error getting view")
+		}
+		v.Clear()
+		//v.Title = v2Meta[newCy].Name
+		fmt.Fprintf(v, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+			v2Meta[newCy].Name,
+			v2Meta[newCy].DisplayName,
+			v2Meta[newCy].PubkeyHex,
+			v2Meta[newCy].Nip05,
+			v2Meta[newCy].About,
+			v2Meta[newCy].Website,
+			v2Meta[newCy].Lud06,
+			v2Meta[newCy].Lud16,
+		)
+	}
+	return nil
+}
+
+func cursorUp(g *gocui.Gui, v *gocui.View) error {
+	if v != nil {
+		cx, cy := v.Cursor()
+		if cy == 0 {
+			return nil
+		}
+		ox, oy := v.Origin()
+		if err := v.SetCursor(cx, cy-1); err != nil && oy > 0 {
+			if err := v.SetOrigin(ox, oy-1); err != nil {
+				return err
+			}
+		}
+
+		v, err := g.View("v3")
+		if err != nil {
+			// handle error
+			fmt.Println("error getting view")
+		}
+		v.Clear()
+		//v.Title = v2Meta[cy-1].Name
+		fmt.Fprintf(v, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+			v2Meta[cy-1].Name,
+			v2Meta[cy-1].DisplayName,
+			v2Meta[cy-1].PubkeyHex,
+			v2Meta[cy-1].Nip05,
+			v2Meta[cy-1].About,
+			v2Meta[cy-1].Website,
+			v2Meta[cy-1].Lud06,
+			v2Meta[cy-1].Lud16,
+		)
+	}
+	return nil
 }
