@@ -45,6 +45,7 @@ func keybindings(g *gocui.Gui) error {
 
 func layout(g *gocui.Gui) error {
 	//useBg := gocui.Attribute(tcell.ColorSlateBlue)
+
 	useBg := gocui.NewRGBColor(0, 0, 200)
 	useFg := gocui.Attribute(tcell.ColorWhite)
 	useFrame := gocui.NewRGBColor(200, 200, 200)
@@ -118,35 +119,6 @@ func layout(g *gocui.Gui) error {
 		fmt.Fprint(v, "(CTRL-C) quit\n")
 	}
 
-	// relay status messages
-	go func() {
-		for {
-			var RelayStatuses []RelayStatus
-			DB.Find(&RelayStatuses)
-			g.Update(func(g *gocui.Gui) error {
-				v, err := g.View("v4")
-				if err != nil {
-					// handle error
-					fmt.Println("error getting view")
-				}
-				v.Clear()
-				for _, relayStatus := range RelayStatuses {
-
-					var shortStatus string
-					if relayStatus.Status == "connection established" {
-						shortStatus = "✅"
-					} else {
-						shortStatus = "❌"
-					}
-
-					fmt.Fprintf(v, "%s %s\n", shortStatus, relayStatus.Url)
-				}
-				return nil
-			})
-			time.Sleep(5 * time.Second)
-		}
-	}()
-
 	return nil
 }
 
@@ -212,10 +184,9 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 	_, vY := v.Size()
 
 	if searchTerm != "" {
-		DB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name like ? or nip05 like ?", searchTerm, searchTerm)
+		ViewDB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name like ? or nip05 like ?", searchTerm, searchTerm)
 	} else {
-		DB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name != ?", "")
-
+		ViewDB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name != ?", "")
 	}
 	v.Clear()
 	for _, metadata := range v2Meta {
@@ -297,8 +268,8 @@ func displayMetadataAsText(m Metadata) string {
 	// Use GORM API build SQL
 	var followersCount int64
 	var followsCount int64
-	DB.Table("metadata_follows").Where("follow_pubkey_hex = ?", m.PubkeyHex).Count(&followersCount)
-	DB.Table("metadata_follows").Where("metadata_pubkey_hex = ?", m.PubkeyHex).Count(&followsCount)
+	ViewDB.Table("metadata_follows").Where("follow_pubkey_hex = ?", m.PubkeyHex).Count(&followersCount)
+	ViewDB.Table("metadata_follows").Where("metadata_pubkey_hex = ?", m.PubkeyHex).Count(&followsCount)
 	x := fmt.Sprintf("%-20sFollowers: %7d, Follows: %7d\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
 		m.Name,
 		followersCount,

@@ -2,13 +2,106 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
+	"os"
+	"time"
 
 	"github.com/awesome-gocui/gocui"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
+type Metadata struct {
+	PubkeyHex    string `gorm:"primaryKey;size:256"`
+	Name         string `gorm:"size:1024"`
+	About        string `gorm:"size:4096"`
+	Nip05        string `gorm:"size:512"`
+	Lud06        string `gorm:"size:2048"`
+	Lud16        string `gorm:"size:512"`
+	Website      string `gorm:"size:512"`
+	DisplayName  string `gorm:"size:512"`
+	Picture      string `gorm:"type:text;size:65535"`
+	TotalFollows int
+	UpdatedAt    time.Time         `gorm:"autoUpdateTime"`
+	Follows      []*Metadata       `gorm:"many2many:metadata_follows"`
+	Servers      []RecommendServer `gorm:"foreignKey:PubkeyHex;references:PubkeyHex"`
+}
+
+type RecommendServer struct {
+	PubkeyHex     string    `gorm:"primaryKey;size:256"`
+	Url           string    `gorm:"size:512"`
+	UpdatedAt     time.Time `gorm:"autoUpdateTime"`
+	CreatedAt     time.Time `gorm:"autoUpdateTime"`
+	RecommendedBy string    `gorm:"size:256"`
+}
+
+type RelayStatus struct {
+	Url       string    `gorm:"primaryKey;size:512"`
+	Status    string    `gorm:"size:512"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
+}
+
+type GormErr struct {
+	Number  int    `json:"Number"`
+	Message string `json:"Message"`
+}
+
+func CheckAndReportGormError(err error, allowErrors []string) bool {
+	if err != nil {
+		for _, e := range allowErrors {
+			if err.Error() == e {
+				fmt.Println("known error: " + e)
+				return true
+			}
+		}
+		byteErr, _ := json.Marshal(err)
+		var newError GormErr
+		json.Unmarshal((byteErr), &newError)
+		fmt.Println(newError)
+		return false
+	}
+	return true
+}
+
+func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
+	rowsUpdated := db.Model(RelayStatus{}).Where("url = ?", url).Updates(&RelayStatus{Url: url, Status: status}).RowsAffected
+	if rowsUpdated == 0 {
+		db.Create(&RelayStatus{Url: url, Status: status})
+	}
+}
+
+func GetGormConnection() *gorm.DB {
+	newLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+		logger.Config{
+			SlowThreshold:             time.Second,   // Slow SQL threshold
+			LogLevel:                  logger.Silent, // Log level
+			IgnoreRecordNotFoundError: true,          // Ignore ErrRecordNotFound error for logger
+			Colorful:                  false,         // Disable color
+		},
+	)
+
+	dsn := "jeremy:jeremy@tcp(127.0.0.1:3306)/nono?charset=utf8mb4&parseTime=True&loc=UTC"
+	db, dberr := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: newLogger})
+	if dberr != nil {
+		panic("failed to connect database")
+	}
+	db.Logger.LogMode(logger.Silent)
+
+	return db
+}
+
+var ViewDB *gorm.DB
+
 func main() {
-	GetGormConnection()
+
+	ctx := context.Background()
+
+	DB := GetGormConnection()
+	ViewDB = DB
 
 	migrateErr := DB.AutoMigrate(&Metadata{})
 	migrateErr2 := DB.AutoMigrate(&RelayStatus{})
@@ -16,8 +109,6 @@ func main() {
 	if migrateErr != nil || migrateErr2 != nil || migrateErr3 != nil {
 		panic("one or more migrations failed, aborting")
 	}
-
-	ctx, _ := context.WithCancel(context.Background())
 
 	// connect to relay(s)
 	DB.Exec("delete from relay_statuses")
@@ -32,7 +123,7 @@ func main() {
 	}
 
 	for _, url := range relayUrls {
-		doRelay(ctx, url)
+		doRelay(DB, ctx, url)
 	}
 
 	g, err := gocui.NewGui(gocui.OutputTrue, true)
@@ -47,35 +138,33 @@ func main() {
 	}
 
 	// relay status messages
-	/*
-		go func() {
-			for {
-				var RelayStatuses []RelayStatus
-				DB.Find(&RelayStatuses)
-				g.Update(func(g *gocui.Gui) error {
-					v, err := g.View("v4")
-					if err != nil {
-						// handle error
-						fmt.Println("error getting view")
-					}
-					v.Clear()
-					for _, relayStatus := range RelayStatuses {
+	go func() {
+		for {
+			var RelayStatuses []RelayStatus
+			DB.Find(&RelayStatuses)
+			g.Update(func(g *gocui.Gui) error {
+				v, err := g.View("v4")
+				if err != nil {
+					// handle error
+					fmt.Println("error getting view")
+				}
+				v.Clear()
+				for _, relayStatus := range RelayStatuses {
 
-						var shortStatus string
-						if relayStatus.Status == "connection established" {
-							shortStatus = "✅"
-						} else {
-							shortStatus = "❌"
-						}
-
-						fmt.Fprintf(v, "%s %s\n", shortStatus, relayStatus.Url)
+					var shortStatus string
+					if relayStatus.Status == "connection established" {
+						shortStatus = "✅"
+					} else {
+						shortStatus = "❌"
 					}
-					return nil
-				})
-				time.Sleep(5 * time.Second)
-			}
-		}()
-	*/
+
+					fmt.Fprintf(v, "%s %s\n", shortStatus, relayStatus.Url)
+				}
+				return nil
+			})
+			time.Sleep(5 * time.Second)
+		}
+	}()
 
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 		log.Panicln(err)
