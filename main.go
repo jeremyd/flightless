@@ -19,18 +19,19 @@ import (
 )
 
 type Metadata struct {
-	PubkeyHex   string            `gorm:"primaryKey;size:256"`
-	Name        string            `gorm:"size:1024"`
-	About       string            `gorm:"size:4096"`
-	Nip05       string            `gorm:"size:512"`
-	Lud06       string            `gorm:"size:2048"`
-	Lud16       string            `gorm:"size:512"`
-	Website     string            `gorm:"size:512"`
-	DisplayName string            `gorm:"size:512"`
-	Picture     string            `gorm:"type:text;size:65535"`
-	UpdatedAt   time.Time         `gorm:"autoUpdateTime"`
-	Follows     []*Metadata       `gorm:"many2many:metadata_follows"`
-	Servers     []RecommendServer `gorm:"foreignKey:PubkeyHex;references:PubkeyHex"`
+	PubkeyHex    string `gorm:"primaryKey;size:256"`
+	Name         string `gorm:"size:1024"`
+	About        string `gorm:"size:4096"`
+	Nip05        string `gorm:"size:512"`
+	Lud06        string `gorm:"size:2048"`
+	Lud16        string `gorm:"size:512"`
+	Website      string `gorm:"size:512"`
+	DisplayName  string `gorm:"size:512"`
+	Picture      string `gorm:"type:text;size:65535"`
+	TotalFollows int
+	UpdatedAt    time.Time         `gorm:"autoUpdateTime"`
+	Follows      []*Metadata       `gorm:"many2many:metadata_follows"`
+	Servers      []RecommendServer `gorm:"foreignKey:PubkeyHex;references:PubkeyHex"`
 }
 
 type RecommendServer struct {
@@ -168,10 +169,12 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				if notFoundError != nil {
 					//fmt.Printf("Creating blank metadata for %s\n", ev.PubKey)
 					person = Metadata{
-						PubkeyHex: ev.PubKey,
+						PubkeyHex:    ev.PubKey,
+						TotalFollows: len(allPTags),
 					}
 					db.Create(&person)
 				} else {
+					db.Model(&person).Update("total_follows", len(allPTags))
 					//fmt.Printf("updating (%d) follows for %s: %s\n", len(allPTags), person.Name, person.PubkeyHex)
 				}
 
@@ -376,6 +379,12 @@ func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("", gocui.KeyF5, gocui.ModNone, refresh); err != nil {
 		log.Panicln(err)
 	}
+	if err := g.SetKeybinding("", gocui.KeyPgup, gocui.ModNone, pageUp); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("", gocui.KeyPgdn, gocui.ModNone, pageDown); err != nil {
+		log.Panicln(err)
+	}
 	return nil
 }
 
@@ -408,9 +417,8 @@ func layout(g *gocui.Gui) error {
 		v.BgColor = useBg
 		v.FgColor = useFg
 		v.FrameColor = useFrame
-
-		v, _ := g.View("v2")
 		refresh(g, v)
+
 	}
 
 	if v, err := g.SetView("v3", 0, maxY-21, maxX-20, maxY-6, 1); err != nil {
@@ -423,6 +431,7 @@ func layout(g *gocui.Gui) error {
 		v.BgColor = useBg
 		v.FgColor = useFg
 		v.FrameColor = useFrame
+		refreshV3(g, v)
 	}
 
 	if v, err := g.SetView("v4", maxX-29, 1, maxX-1, maxY-6, 4); err != nil {
@@ -457,14 +466,15 @@ func layout(g *gocui.Gui) error {
 }
 
 func nextView(g *gocui.Gui, v *gocui.View) error {
-	nextIndex := (active + 1) % len(viewArr)
-	name := viewArr[nextIndex]
+	//nextIndex := (active + 1) % len(viewArr)
+	//name := viewArr[nextIndex]
+	name := "v2"
 
 	if _, err := g.SetCurrentView(name); err != nil {
 		return err
 	}
 
-	active = nextIndex
+	active = 2
 	return nil
 }
 
@@ -482,7 +492,11 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 	}
 
 	_, vY := v.Size()
-	DB.Limit(vY-1).Find(&v2Meta, "name != ?", "")
+
+	DB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name != ?", "")
+	//DB.Limit(vY-1).Find(&v2Meta, "name != ?", "")
+
+	v.Clear()
 	for _, metadata := range v2Meta {
 		if metadata.Nip05 != "" {
 			fmt.Fprintf(v, "%-30s %-30s \n", metadata.Name, metadata.Nip05)
@@ -496,11 +510,30 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+var CurrOffset = 0
+
+func pageUp(g *gocui.Gui, v *gocui.View) error {
+	_, vSizeY := v.Size()
+	CurrOffset -= vSizeY
+	refresh(g, v)
+	return nil
+}
+
+func pageDown(g *gocui.Gui, v *gocui.View) error {
+	_, vSizeY := v.Size()
+	CurrOffset += vSizeY
+	refresh(g, v)
+	return nil
+}
+
 func cursorDown(g *gocui.Gui, v *gocui.View) error {
 	if v != nil {
 		cx, cy := v.Cursor()
 		_, vSizeY := v.Size()
 		if (cy + 1) >= (vSizeY - 1) {
+			// end of page
+			CurrOffset += vSizeY
+			refresh(g, v)
 			return nil
 		}
 		if err := v.SetCursor(cx, cy+1); err != nil {
@@ -509,29 +542,45 @@ func cursorDown(g *gocui.Gui, v *gocui.View) error {
 				return err
 			}
 		}
-		var err error
-
-		_, newCy := v.Cursor()
-
-		v, err := g.View("v3")
-		if err != nil {
-			// handle error
-			fmt.Println("error getting view")
-		}
-		v.Clear()
-		//v.Title = v2Meta[newCy].Name
-		fmt.Fprintf(v, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
-			v2Meta[newCy].Name,
-			v2Meta[newCy].DisplayName,
-			v2Meta[newCy].PubkeyHex,
-			v2Meta[newCy].Nip05,
-			v2Meta[newCy].About,
-			v2Meta[newCy].Website,
-			v2Meta[newCy].Lud06,
-			v2Meta[newCy].Lud16,
-		)
+		refreshV3(g, v)
 	}
 	return nil
+}
+
+func refreshV3(g *gocui.Gui, v *gocui.View) error {
+	_, newCy := v.Cursor()
+	v, err := g.View("v3")
+	if err != nil {
+		// handle error
+		fmt.Println("error getting view")
+		return nil
+	}
+	v.Clear()
+	//v.Title = v2Meta[0].Name
+	fmt.Fprintf(v, "%s", displayMetadataAsText(v2Meta[newCy]))
+	g.SetCurrentView("v2")
+	return nil
+}
+
+func displayMetadataAsText(m Metadata) string {
+	// Use GORM API build SQL
+	var followersCount int64
+	var followsCount int64
+	DB.Table("metadata_follows").Where("follow_pubkey_hex = ?", m.PubkeyHex).Count(&followersCount)
+	DB.Table("metadata_follows").Where("metadata_pubkey_hex = ?", m.PubkeyHex).Count(&followsCount)
+	x := fmt.Sprintf("%-20sFollowers: %7d, Follows: %7d\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+		m.Name,
+		followersCount,
+		followsCount,
+		m.DisplayName,
+		m.PubkeyHex,
+		m.Nip05,
+		m.About,
+		m.Website,
+		m.Lud06,
+		m.Lud16,
+	)
+	return x
 }
 
 func cursorUp(g *gocui.Gui, v *gocui.View) error {
@@ -546,24 +595,7 @@ func cursorUp(g *gocui.Gui, v *gocui.View) error {
 				return err
 			}
 		}
-
-		v, err := g.View("v3")
-		if err != nil {
-			// handle error
-			fmt.Println("error getting view")
-		}
-		v.Clear()
-		//v.Title = v2Meta[cy-1].Name
-		fmt.Fprintf(v, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
-			v2Meta[cy-1].Name,
-			v2Meta[cy-1].DisplayName,
-			v2Meta[cy-1].PubkeyHex,
-			v2Meta[cy-1].Nip05,
-			v2Meta[cy-1].About,
-			v2Meta[cy-1].Website,
-			v2Meta[cy-1].Lud06,
-			v2Meta[cy-1].Lud16,
-		)
+		refreshV3(g, v)
 	}
 	return nil
 }
