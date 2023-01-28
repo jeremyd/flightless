@@ -24,7 +24,7 @@ func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("v2", rune(0x73), gocui.ModNone, search); err != nil {
 		log.Panicln(err)
 	}
-	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, search); err != nil {
+	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, next); err != nil {
 		log.Panicln(err)
 	}
 	if err := g.SetKeybinding("v2", gocui.KeyArrowDown, gocui.ModNone, cursorDown); err != nil {
@@ -44,6 +44,17 @@ func keybindings(g *gocui.Gui) error {
 	}
 	if err := g.SetKeybinding("msg", gocui.KeyEnter, gocui.ModNone, doSearch); err != nil {
 		log.Panicln(err)
+	}
+	return nil
+}
+
+func next(g *gocui.Gui, v *gocui.View) error {
+	if g.CurrentView().Name() == "v2" {
+		g.SetCurrentView("v3")
+		g.Cursor = true
+	} else {
+		g.Cursor = false
+		g.SetCurrentView("v2")
 	}
 	return nil
 }
@@ -86,13 +97,14 @@ func layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		//v.Title = "Details"
+		v.Title = "Details"
 		v.Wrap = true
 		v.Autoscroll = false
 		v.BgColor = useBg
 		v.FgColor = useFg
 		v.FrameColor = useFrame
-		v.Editable = false
+		v.Editable = true
+		v.Cursor()
 		refreshV3(g, v)
 	}
 
@@ -161,7 +173,7 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 		g.Update(func(g *gocui.Gui) error {
 			v, err := g.View("v5")
 			if err != nil {
-				fmt.Println("error getting view")
+				//fmt.Println("error getting view")
 			}
 			v.Clear()
 			fmt.Fprintln(v, "Closing connections and exiting..")
@@ -183,7 +195,7 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 	g.SetCurrentView("v2")
 	v, err := g.View("v2")
 	if err != nil {
-		fmt.Println("error getting view")
+		//fmt.Println("error getting view")
 	}
 
 	_, vY := v.Size()
@@ -263,12 +275,14 @@ func refreshV3(g *gocui.Gui, v *gocui.View) error {
 	v, err := g.View("v3")
 	if err != nil {
 		// handle error
-		fmt.Println("error getting view")
+		//fmt.Println("error getting view")
 		return nil
 	}
 	v.Clear()
 	//v.Title = v2Meta[0].Name
-	fmt.Fprintf(v, "%s", displayMetadataAsText(v2Meta[newCy]))
+	if len(v2Meta) > 0 {
+		fmt.Fprintf(v, "%s", displayMetadataAsText(v2Meta[newCy]))
+	}
 	g.SetCurrentView("v2")
 	return nil
 }

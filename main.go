@@ -10,7 +10,7 @@ import (
 
 	"github.com/awesome-gocui/gocui"
 	"github.com/joho/godotenv"
-	"gorm.io/driver/mysql"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -54,14 +54,14 @@ func CheckAndReportGormError(err error, allowErrors []string) bool {
 	if err != nil {
 		for _, e := range allowErrors {
 			if err.Error() == e {
-				fmt.Println("known error: " + e)
+				//fmt.Println("known error: " + e)
 				return true
 			}
 		}
 		byteErr, _ := json.Marshal(err)
 		var newError GormErr
 		json.Unmarshal((byteErr), &newError)
-		fmt.Println(newError)
+		//fmt.Println(newError)
 		return false
 	}
 	return true
@@ -75,13 +75,18 @@ func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
 }
 
 func GetGormConnection() *gorm.DB {
+	file, err := os.OpenFile("nono.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		// Handle error
+		panic(err)
+	}
 	newLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+		log.New(file, "\r\n", log.LstdFlags), // io writer
 		logger.Config{
-			SlowThreshold:             time.Second,   // Slow SQL threshold
-			LogLevel:                  logger.Silent, // Log level
-			IgnoreRecordNotFoundError: true,          // Ignore ErrRecordNotFound error for logger
-			Colorful:                  false,         // Disable color
+			SlowThreshold:             time.Second,  // Slow SQL threshold
+			LogLevel:                  logger.Error, // Log level
+			IgnoreRecordNotFoundError: true,         // Ignore ErrRecordNotFound error for logger
+			Colorful:                  false,        // Disable color
 		},
 	)
 
@@ -90,11 +95,13 @@ func GetGormConnection() *gorm.DB {
 		panic("DB not found in env, aborting (see env.example)")
 	}
 
-	db, dberr := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: newLogger})
+	db, dberr := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: newLogger})
 	if dberr != nil {
 		panic("failed to connect database")
 	}
 	db.Logger.LogMode(logger.Silent)
+	sql, _ := db.DB()
+	sql.SetMaxOpenConns(1)
 
 	return db
 }
@@ -123,13 +130,13 @@ func main() {
 	// connect to relay(s)
 	DB.Exec("delete from relay_statuses")
 	relayUrls := []string{
-		"wss://relay.snort.social",
-		"wss://relay.damus.io",
-		"wss://nostr.zebedee.cloud",
-		"wss://eden.nostr.land",
-		"wss://nostr-pub.wellorder.net",
+		//"wss://relay.snort.social",
+		//"wss://relay.damus.io",
+		//"wss://nostr.zebedee.cloud",
+		//"wss://eden.nostr.land",
+		//"wss://nostr-pub.wellorder.net",
 		"wss://nostr-dev.wellorder.net",
-		"wss://relay.nostr.info",
+		//"wss://relay.nostr.info",
 	}
 
 	for _, url := range relayUrls {
@@ -156,7 +163,7 @@ func main() {
 				v, err := g.View("v4")
 				if err != nil {
 					// handle error
-					fmt.Println("error getting view")
+					//fmt.Println("error getting view")
 				}
 				v.Clear()
 				for _, relayStatus := range RelayStatuses {

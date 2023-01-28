@@ -1,3 +1,6 @@
 nono
 .env
+.env*
 *.swp
+nono.log
+nono.db

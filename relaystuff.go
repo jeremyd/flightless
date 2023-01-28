@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,7 +15,7 @@ import (
 func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 	relay, err := nostr.RelayConnect(ctx, url)
 	if err != nil {
-		fmt.Printf("failed initial connection to relay: %s, %s; skipping relay\n", url, err)
+		//fmt.Printf("failed initial connection to relay: %s, %s; skipping relay\n", url, err)
 		UpdateOrCreateRelayStatus(db, url, "failed initial connection")
 		return false
 	}
@@ -78,18 +77,24 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 			} else if ev.Kind == 2 {
 				// recommend relay
 				//fmt.Println("FOUND TYPE 2!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-				var servers []RecommendServer
-				db.Find(&servers, "pubkey_hex = ? and url = ? and recommended_by = ?", ev.PubKey, ev.Content, ev.PubKey)
-				if len(servers) > 0 {
-					// already recommended, update time fields?
-					//fmt.Println("already recommended, skip")
+				var server RecommendServer
+				notF := db.First(&server, "pubkey_hex = ? and recommended_by = ?", ev.PubKey, ev.PubKey).Error
+				if notF == nil {
+					db.Model(&server).Update("url", ev.Content)
 				} else {
 					// add to recommended servers
-					db.Create(&RecommendServer{
+					cErr := db.Create(&RecommendServer{
 						PubkeyHex:     ev.PubKey,
 						Url:           ev.Content,
 						RecommendedBy: ev.PubKey,
-					})
+					}).Error
+					// race condition, try again w/update?
+					if cErr != nil {
+						notF := db.First(&server, "pubkey_hex = ? and recommended_by = ?", ev.PubKey, ev.PubKey).Error
+						if notF == nil {
+							db.Model(&server).Update("url", ev.Content)
+						}
+					}
 				}
 			} else if ev.Kind == 3 {
 				// Contact List
@@ -144,7 +149,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 							//fmt.Println("Error creating user for follow: ", createNewErr)
 						}
 						// use gorm insert statement to update the join table
-						errExec := db.Exec("insert ignore into metadata_follows (metadata_pubkey_hex, follow_pubkey_hex) values (?, ?)", person.PubkeyHex, newUser.PubkeyHex).Error
+						errExec := db.Exec("insert or ignore into metadata_follows (metadata_pubkey_hex, follow_pubkey_hex) values (?, ?)", person.PubkeyHex, newUser.PubkeyHex).Error
 						CheckAndReportGormError(errExec, []string{"1062"})
 					} else {
 						// follow user found,
@@ -163,7 +168,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 							}
 						}
 						// use gorm insert statement to update the join table
-						errExec := db.Exec("insert ignore into metadata_follows (metadata_pubkey_hex, follow_pubkey_hex) values (?, ?)", person.PubkeyHex, followPerson.PubkeyHex).Error
+						errExec := db.Exec("insert or ignore into metadata_follows (metadata_pubkey_hex, follow_pubkey_hex) values (?, ?)", person.PubkeyHex, followPerson.PubkeyHex).Error
 						CheckAndReportGormError(errExec, []string{"1062"})
 					}
 				}
