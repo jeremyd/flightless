@@ -3,14 +3,19 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip19"
 	"gorm.io/gorm"
 )
+
+var nostrSubs []*nostr.Subscription
+var nostrRelays []*nostr.Relay
 
 func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 	relay, err := nostr.RelayConnect(ctx, url)
@@ -19,19 +24,42 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 		UpdateOrCreateRelayStatus(db, url, "failed initial connection")
 		return false
 	}
+	nostrRelays = append(nostrRelays, relay)
 
 	UpdateOrCreateRelayStatus(db, url, "connection established")
 
+	pubkey, foundPub := os.LookupEnv("PUBKEY")
+	var filters []nostr.Filter
 	// create filters
-	filters := []nostr.Filter{{
-		Kinds: []int{0, 2, 3},
-		//Tags:  t,
-		// limit = 3, get the three most recent notes
-		Limit: 10,
-	}}
+	if foundPub {
+		// if the pubkey starts with npub, decode with nip19
+		if pubkey[0:4] == "npub" {
+			if _, v, err := nip19.Decode(pubkey); err == nil {
+				pubkey = v.(string)
+			}
+		}
+		filters = []nostr.Filter{{
+			Kinds: []int{0, 2, 3},
+			//Tags:  t,
+			// limit = 3, get the three most recent notes
+			Limit: 10,
+		},
+			{Kinds: []int{0, 2, 3},
+				Authors: []string{pubkey},
+				Limit:   10,
+			}}
+	} else {
+		filters = []nostr.Filter{{
+			Kinds: []int{0, 2, 3},
+			//Tags:  t,
+			// limit = 3, get the three most recent notes
+			Limit: 10,
+		}}
+	}
 
 	// create a subscription and submit to relay
 	sub := relay.Subscribe(ctx, filters)
+	nostrSubs = append(nostrSubs, sub)
 
 	go func() {
 		<-sub.EndOfStoredEvents
@@ -46,8 +74,8 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 		sub.Unsub()
 		relay.Close()
 		// give other relays time to close
-		time.Sleep(5 * time.Second)
-		os.Exit(0)
+		time.Sleep(1 * time.Second)
+		//os.Exit(0)
 	}()
 
 	go func() {
@@ -179,13 +207,18 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 	go func() {
 		for cErr := range relay.ConnectionError {
 			if cErr != nil {
-				//fmt.Printf("relay: %s connection error: %s\n", relay.URL, cErr)
-				UpdateOrCreateRelayStatus(db, relay.URL, "connection error: "+cErr.Error())
-				// attempt a re-connection
-				time.Sleep(60 * time.Second)
-				//fmt.Printf("reconnecting to %s\n", relay.URL)
-				UpdateOrCreateRelayStatus(db, relay.URL, "reconnecting")
-				doRelay(db, ctx, relay.URL)
+				var relayStatus RelayStatus
+				err := db.First(&relayStatus, "url = ?", relay.URL)
+				// if we don't find the relay in our statuses, don't reconnect
+				if err == nil {
+					//fmt.Printf("relay: %s connection error: %s\n", relay.URL, cErr)
+					UpdateOrCreateRelayStatus(db, relay.URL, "connection error: "+cErr.Error())
+					// attempt a re-connection
+					time.Sleep(60 * time.Second)
+					fmt.Printf("reconnecting to %s\n", relay.URL)
+					UpdateOrCreateRelayStatus(db, relay.URL, "reconnecting")
+					doRelay(db, ctx, relay.URL)
+				}
 			}
 		}
 	}()

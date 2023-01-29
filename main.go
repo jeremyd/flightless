@@ -92,7 +92,7 @@ func GetGormConnection() *gorm.DB {
 
 	dsn, foundDsn := os.LookupEnv("DB")
 	if !foundDsn {
-		panic("DB not found in env, aborting (see env.example)")
+		dsn = "nono.db?cache=shared&mode=rwc"
 	}
 
 	db, dberr := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: newLogger})
@@ -128,15 +128,25 @@ func main() {
 	}
 
 	// connect to relay(s)
-	DB.Exec("delete from relay_statuses")
-	relayUrls := []string{
-		//"wss://relay.snort.social",
-		//"wss://relay.damus.io",
-		//"wss://nostr.zebedee.cloud",
-		//"wss://eden.nostr.land",
-		//"wss://nostr-pub.wellorder.net",
-		"wss://nostr-dev.wellorder.net",
-		//"wss://relay.nostr.info",
+	//DB.Exec("delete from relay_statuses")
+	var relayUrls []string
+	var relayStatuses []RelayStatus
+	DB.Find(&relayStatuses)
+	if len(relayStatuses) == 0 {
+		fmt.Println("error finding relay urls")
+		relayUrls = []string{
+			//"wss://relay.snort.social",
+			//"wss://relay.damus.io",
+			//"wss://nostr.zebedee.cloud",
+			//"wss://eden.nostr.land",
+			//"wss://nostr-pub.wellorder.net",
+			"wss://nostr-dev.wellorder.net",
+			//"wss://relay.nostr.info",
+		}
+	} else {
+		for _, relayStatus := range relayStatuses {
+			relayUrls = append(relayUrls, relayStatus.Url)
+		}
 	}
 
 	for _, url := range relayUrls {
@@ -154,32 +164,37 @@ func main() {
 		log.Panicln(err)
 	}
 
-	// relay status messages
+	// relay status manager
 	go func() {
 		for {
 			var RelayStatuses []RelayStatus
 			DB.Find(&RelayStatuses)
-			g.Update(func(g *gocui.Gui) error {
-				v, err := g.View("v4")
-				if err != nil {
-					// handle error
-					//fmt.Println("error getting view")
-				}
-				v.Clear()
-				for _, relayStatus := range RelayStatuses {
+			for _, relayStatus := range RelayStatuses {
 
-					var shortStatus string
-					if relayStatus.Status == "connection established" {
-						shortStatus = "✅"
-					} else {
-						shortStatus = "❌"
+				if relayStatus.Status == "waiting" {
+					doRelay(DB, ctx, relayStatus.Url)
+				} else if relayStatus.Status == "deleting" {
+					foundit := false
+					for _, r := range nostrRelays {
+						if r.URL == relayStatus.Url {
+							err := DB.Delete(&relayStatus).Error
+							if err != nil {
+								fmt.Println(err)
+							}
+							foundit = true
+							r.Close()
+						}
 					}
-
-					fmt.Fprintf(v, "%s %s\n", shortStatus, relayStatus.Url)
+					// if we didn't find it, delete the record anyway
+					if !foundit {
+						err := DB.Delete(&relayStatus).Error
+						if err != nil {
+							fmt.Println(err)
+						}
+					}
 				}
-				return nil
-			})
-			time.Sleep(5 * time.Second)
+			}
+			time.Sleep(1 * time.Second)
 		}
 	}()
 
