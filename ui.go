@@ -52,7 +52,7 @@ func keybindings(g *gocui.Gui) error {
 		log.Panicln(err)
 	}
 	// r key (refresh)
-	if err := g.SetKeybinding("", rune(0x72), gocui.ModNone, refresh); err != nil {
+	if err := g.SetKeybinding("", rune(0x72), gocui.ModNone, refreshAll); err != nil {
 		log.Panicln(err)
 	}
 	if err := g.SetKeybinding("", gocui.KeyPgup, gocui.ModNone, pageUp); err != nil {
@@ -68,18 +68,23 @@ func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("v2", rune(0x61), gocui.ModNone, addRelay); err != nil {
 		log.Panicln(err)
 	}
-	if err := g.SetKeybinding("v2", gocui.KeyEnter, gocui.ModNone, next); err != nil {
+	// a key (add new relay)
+	if err := g.SetKeybinding("v4", rune(0x61), gocui.ModNone, addRelay); err != nil {
 		log.Panicln(err)
 	}
 	//y key
-	if err := g.SetKeybinding("addrelay", rune(0x79), gocui.ModNone, doAddRelay); err != nil {
-		log.Panicln(err)
-	}
+	//if err := g.SetKeybinding("addrelay", rune(0x79), gocui.ModNone, doAddRelay); err != nil {
+	//	log.Panicln(err)
+	//}
 	if err := g.SetKeybinding("addrelay", gocui.KeyEnter, gocui.ModNone, doAddRelay); err != nil {
 		log.Panicln(err)
 	}
+
 	//n key
-	if err := g.SetKeybinding("addrelay", rune(0x6e), gocui.ModNone, cancelAddRelay); err != nil {
+	//if err := g.SetKeybinding("addrelay", rune(0x6e), gocui.ModNone, cancelAddRelay); err != nil {
+
+	//cancel key
+	if err := g.SetKeybinding("addrelay", gocui.KeyCtrlC, gocui.ModNone, cancelAddRelay); err != nil {
 		log.Panicln(err)
 	}
 	return nil
@@ -421,6 +426,7 @@ func displayMetadataAsText(m Metadata) string {
 
 func addRelay(g *gocui.Gui, v *gocui.View) error {
 	maxX, maxY := g.Size()
+	prevViewName := v.Name()
 	if v, err := g.SetView("addrelay", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
@@ -428,21 +434,23 @@ func addRelay(g *gocui.Gui, v *gocui.View) error {
 		if _, err := g.SetCurrentView("addrelay"); err != nil {
 			return err
 		}
-		v.Title = "Add Relay? (y/n)"
-		v.Editable = false
+		v.Title = "Add Relay? [enter] to save / [CTRL-C] to cancel"
+		v.Editable = true
 		v.KeybindOnEdit = true
 		v2, _ := g.View("v2")
 		_, cy := v2.Cursor()
-		curM := v2Meta[cy]
-		var curServer RecommendServer
-		ViewDB.Model(&curM).Association("Servers").Find(&curServer)
-		if curServer.Url == "" {
-			fmt.Fprintf(v, "%s", "not found")
-			time.Sleep(2 * time.Second)
-			g.SetCurrentView("v2")
-			g.DeleteView("addrelay")
-		} else {
-			fmt.Fprintf(v, "%s", curServer.Url)
+		if prevViewName == "v2" {
+			curM := v2Meta[cy]
+			var curServer RecommendServer
+			ViewDB.Model(&curM).Association("Servers").Find(&curServer)
+			if curServer.Url == "" {
+				fmt.Fprintf(v, "%s", "not found")
+				time.Sleep(2 * time.Second)
+				g.SetCurrentView("v2")
+				g.DeleteView("addrelay")
+			} else {
+				fmt.Fprintf(v, "%s", curServer.Url)
+			}
 		}
 	}
 	return nil
@@ -450,12 +458,14 @@ func addRelay(g *gocui.Gui, v *gocui.View) error {
 
 func doAddRelay(g *gocui.Gui, v *gocui.View) error {
 	if v != nil {
-		v2, _ := g.View("v2")
-		_, cy := v2.Cursor()
-		curM := v2Meta[cy]
-		var curServer RecommendServer
-		ViewDB.Model(&curM).Association("Servers").Find(&curServer)
-		err := ViewDB.Create(&RelayStatus{Url: curServer.Url, Status: "waiting"}).Error
+		line := v.Buffer()
+		if line == "" {
+			g.SetCurrentView("v2")
+			g.DeleteView("addrelay")
+			refreshRelays(g, v)
+			return nil
+		}
+		err := ViewDB.Create(&RelayStatus{Url: line, Status: "waiting"}).Error
 		if err != nil {
 			v.Title = "error adding relay"
 		}
@@ -509,6 +519,13 @@ func refreshRelays(g *gocui.Gui, v *gocui.View) error {
 		}
 		return nil
 	}
+}
+
+func refreshAll(g *gocui.Gui, v *gocui.View) error {
+	refresh(g, v)
+	refreshV3(g, v)
+	refreshRelays(g, v)
+	return nil
 }
 
 func cancelAddRelay(g *gocui.Gui, v *gocui.View) error {
