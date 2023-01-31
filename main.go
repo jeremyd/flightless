@@ -16,7 +16,7 @@ import (
 )
 
 type Metadata struct {
-	PubkeyHex    string `gorm:"primaryKey;size:256"`
+	PubkeyHex    string `gorm:"primaryKey;size:65"`
 	Name         string `gorm:"size:1024"`
 	About        string `gorm:"size:4096"`
 	Nip05        string `gorm:"size:512"`
@@ -32,7 +32,8 @@ type Metadata struct {
 }
 
 type RecommendServer struct {
-	PubkeyHex     string    `gorm:"primaryKey;size:256"`
+	ID            int64     `gorm:"primaryKey;autoIncrement"`
+	PubkeyHex     string    `gorm:"size:65"`
 	Url           string    `gorm:"size:512"`
 	UpdatedAt     time.Time `gorm:"autoUpdateTime"`
 	CreatedAt     time.Time `gorm:"autoUpdateTime"`
@@ -48,6 +49,16 @@ type RelayStatus struct {
 type GormErr struct {
 	Number  int    `json:"Number"`
 	Message string `json:"Message"`
+}
+
+type Account struct {
+	Pubkey     string `gorm:"primaryKey;size:65"`
+	PubkeyNpub string `gorm:"size:65"`
+	Privatekey string `gorm:"primaryKey;size:65"` // encrypted
+}
+
+type Login struct {
+	PasswordHash string `gorm:"size:43"` //salted and hashed
 }
 
 func CheckAndReportGormError(err error, allowErrors []string) bool {
@@ -74,14 +85,18 @@ func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
 	}
 }
 
+var TheLog *log.Logger
+
 func GetGormConnection() *gorm.DB {
 	file, err := os.OpenFile("nono.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		// Handle error
 		panic(err)
 	}
+
+	TheLog = log.New(file, "\r\n", log.LstdFlags) // io writer
 	newLogger := logger.New(
-		log.New(file, "\r\n", log.LstdFlags), // io writer
+		TheLog,
 		logger.Config{
 			SlowThreshold:             time.Second,  // Slow SQL threshold
 			LogLevel:                  logger.Error, // Log level
@@ -108,6 +123,10 @@ func GetGormConnection() *gorm.DB {
 
 var ViewDB *gorm.DB
 
+var Password []byte
+
+var CTX context.Context
+
 func main() {
 
 	err := godotenv.Load()
@@ -115,7 +134,7 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	ctx := context.Background()
+	CTX = context.Background()
 
 	DB := GetGormConnection()
 	ViewDB = DB
@@ -123,8 +142,43 @@ func main() {
 	migrateErr := DB.AutoMigrate(&Metadata{})
 	migrateErr2 := DB.AutoMigrate(&RelayStatus{})
 	migrateErr3 := DB.AutoMigrate(&RecommendServer{})
-	if migrateErr != nil || migrateErr2 != nil || migrateErr3 != nil {
-		panic("one or more migrations failed, aborting")
+	migrateErr4 := DB.AutoMigrate(&Login{})
+	migrateErr5 := DB.AutoMigrate(&Account{})
+
+	migrateErrs := []error{
+		migrateErr,
+		migrateErr2,
+		migrateErr3,
+		migrateErr4,
+		migrateErr5,
+	}
+	for i, err := range migrateErrs {
+		if err != nil {
+			fmt.Println("Error running a migration (%d) %s\nexiting.", i, err)
+			os.Exit(1)
+		}
+	}
+
+	// Login
+
+	var login Login
+	loginDbErr := DB.First(&login).Error
+
+	if loginDbErr != nil || login.PasswordHash == "" {
+		fmt.Println("no login found, create a new password")
+		Password = GetNewPwd()
+		login.PasswordHash = HashAndSalt(Password)
+		DB.Create(&login)
+		fmt.Println("login created, loading...")
+	} else {
+		Password = GetPwd()
+		success := ComparePasswords(login.PasswordHash, Password)
+		if success {
+			fmt.Println("login success, loading...")
+		} else {
+			fmt.Println("login failed")
+			os.Exit(1)
+		}
 	}
 
 	// connect to relay(s)
@@ -150,7 +204,7 @@ func main() {
 	}
 
 	for _, url := range relayUrls {
-		doRelay(DB, ctx, url)
+		doRelay(DB, CTX, url)
 	}
 
 	g, err := gocui.NewGui(gocui.OutputTrue, true)
@@ -172,7 +226,7 @@ func main() {
 			for _, relayStatus := range RelayStatuses {
 
 				if relayStatus.Status == "waiting" {
-					doRelay(DB, ctx, relayStatus.Url)
+					doRelay(DB, CTX, relayStatus.Url)
 				} else if relayStatus.Status == "deleting" {
 					foundit := false
 					for _, r := range nostrRelays {

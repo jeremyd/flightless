@@ -1,6 +1,8 @@
 nono
 .env
 .env*
+mysql.env
 *.swp
-nono.log
+nono.log*
 nono.db
+nono.db*
