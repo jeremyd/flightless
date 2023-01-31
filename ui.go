@@ -299,13 +299,13 @@ func search(g *gocui.Gui, v *gocui.View) error {
 
 func doSearch(g *gocui.Gui, v *gocui.View) error {
 	followSearch = false
+	CurrOffset = 0
 	msg, eM := g.View("msg")
 	if eM != nil {
 		return nil
 	}
 	searchTerm = "%" + msg.Buffer() + "%"
 	g.DeleteView("msg")
-	CurrOffset = 0
 	g.SetCurrentView("v2")
 	refresh(g, v)
 	refreshV3(g, v)
@@ -350,7 +350,7 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 
 	v.Clear()
 	if followSearch {
-		for _, metadata := range followPages {
+		for _, metadata := range followPages[CurrOffset:] {
 			if metadata.Nip05 != "" {
 				fmt.Fprintf(v, "%-30s %-30s \n", metadata.Name, metadata.Nip05)
 			} else {
@@ -410,12 +410,23 @@ func cursorDownV2(g *gocui.Gui, v *gocui.View) error {
 		// v2 pagination
 		if (cy + 1) >= (vSizeY - 1) {
 			// end of page
+			if err := v.SetCursor(0, 0); err != nil {
+				if err := v.SetOrigin(0, 0); err != nil {
+					return err
+				}
+			}
 			CurrOffset += vSizeY
+			//ViewDB.Model(&followTarget).Offset(CurrOffset).Association("Follows").Find(&followPages)
+			TheLog.Println("len was", len(followPages), "curr offset", CurrOffset)
 			refresh(g, v)
 			refreshV3(g, v)
 			return nil
 		}
-		if (cy + 1) >= len(v2Meta) {
+		if followSearch && (cy+1) >= len(followPages) {
+			// end of list
+			return nil
+		}
+		if !followSearch && (cy+1) >= len(v2Meta) {
 			// end of list
 			return nil
 		}
@@ -533,7 +544,7 @@ func refreshV3(g *gocui.Gui, v *gocui.View) error {
 	v3, _ := g.View("v3")
 	v3.Clear()
 	if followSearch {
-		if len(followPages) >= newCy {
+		if len(followPages) > newCy {
 			fmt.Fprintf(v3, "%s", displayMetadataAsText(followPages[newCy]))
 
 		}
@@ -910,11 +921,21 @@ func follow(g *gocui.Gui, v *gocui.View) error {
 
 	cView, _ := g.View("v2")
 	_, cy := cView.Cursor()
-	if len(v2Meta) > 0 && len(v2Meta) >= cy {
+
+	var m Metadata
+	if !followSearch {
+		if len(v2Meta) > 0 && len(v2Meta) >= cy {
+			// do nothing?
+		} else {
+			return nil
+		}
+		m = v2Meta[cy]
 	} else {
-		return nil
+		if len(followPages) <= cy+CurrOffset {
+			return nil
+		}
+		m = followPages[cy+CurrOffset]
 	}
-	m := v2Meta[cy]
 
 	var numFollows int64
 	ViewDB.Table("metadata_follows").Where("metadata_pubkey_hex = ?", accounts[0].Pubkey).Count(&numFollows)
@@ -952,7 +973,13 @@ func doFollow(g *gocui.Gui, v *gocui.View) error {
 	cView, _ := g.View("v2")
 	_, cy := cView.Cursor()
 
-	m := v2Meta[cy]
+	var m Metadata
+	if followSearch {
+		m = followPages[cy+CurrOffset]
+
+	} else {
+		m = v2Meta[cy]
+	}
 
 	// use account 0 for now
 	accounts := []Account{}
@@ -1030,42 +1057,52 @@ func selectBar(g *gocui.Gui, v *gocui.View) error {
 	if v != nil {
 		_, cy := v.Cursor()
 		foundHighlight := false
-		for i, h := range highlighted {
-			if h == v2Meta[cy].PubkeyHex {
-				foundHighlight = true
-				highlighted = removeFromHighlight(highlighted, i)
-				v.SetHighlight(cy, false)
+
+		if followSearch {
+			for i, h := range highlighted {
+				if h == followPages[cy+CurrOffset].PubkeyHex {
+					foundHighlight = true
+					highlighted = removeFromHighlight(highlighted, i)
+					v.SetHighlight(cy+CurrOffset, false)
+				}
 			}
-		}
-		if !foundHighlight {
-			v.SetHighlight(cy, true)
-			highlighted = append(highlighted, v2Meta[cy].PubkeyHex)
+			if !foundHighlight {
+				v.SetHighlight(cy, true)
+				highlighted = append(highlighted, followPages[cy+CurrOffset].PubkeyHex)
+			}
+		} else {
+
+			for i, h := range highlighted {
+				if h == v2Meta[cy].PubkeyHex {
+					foundHighlight = true
+					highlighted = removeFromHighlight(highlighted, i)
+					v.SetHighlight(cy, false)
+				}
+			}
+			if !foundHighlight {
+				v.SetHighlight(cy, true)
+				highlighted = append(highlighted, v2Meta[cy].PubkeyHex)
+			}
 		}
 	}
 	return nil
 }
 
 var followPages []Metadata
+var followTarget Metadata
 
 func askExpand(g *gocui.Gui, v *gocui.View) error {
 	if v != nil {
 		v2, _ := g.View("v2")
 		_, cy := v2.Cursor()
-
 		if followSearch {
-			if cy >= len(followPages) {
-				// set cursor
-				cy = 0
-				if err := v2.SetCursor(0, 0); err != nil {
-					if err := v.SetOrigin(0, 0); err != nil {
-						return err
-					}
-				}
-			}
-			ViewDB.Model(&followPages[cy]).Association("Follows").Find(&followPages)
+			followTarget := followPages[cy+CurrOffset]
+			CurrOffset = 0
+			ViewDB.Model(&followTarget).Offset(CurrOffset).Association("Follows").Find(&followPages)
+			TheLog.Println("len was", len(followPages), "curr offset", CurrOffset)
 			if len(followPages) > 0 {
 				TheLog.Println("current follows", len(followPages))
-				v2.Title = fmt.Sprintf("%s/follows", followPages[cy].Name)
+				v2.Title = fmt.Sprintf("%s/follows", followTarget.Name)
 				refresh(g, v2)
 				refreshV3(g, v2)
 			} else {
@@ -1073,9 +1110,11 @@ func askExpand(g *gocui.Gui, v *gocui.View) error {
 			}
 		} else {
 			// reload view v2 with v2Meta loaded with follows to start
-			ViewDB.Model(&v2Meta[cy]).Association("Follows").Find(&followPages)
+			CurrOffset = 0
+			target := v2Meta[cy]
+			ViewDB.Model(&target).Offset(CurrOffset).Association("Follows").Find(&followPages)
 			TheLog.Println("current follows", len(followPages))
-			v2.Title = fmt.Sprintf("%s/follows", v2Meta[cy].Name)
+			v2.Title = fmt.Sprintf("%s/follows", target.Name)
 			followSearch = true
 			refresh(g, v2)
 			refreshV3(g, v2)
