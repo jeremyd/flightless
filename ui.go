@@ -206,7 +206,7 @@ func layout(g *gocui.Gui) error {
 		v.Frame = false
 		v.BgColor = useBg
 		v.FgColor = useFg
-		fmt.Fprint(v, "NoGo v0.0.1")
+		fmt.Fprint(v, "FlexTree Pro Gold v0.0.1")
 	}
 
 	if v, err := g.SetView("v2", 0, 1, maxX-20, maxY-20, 0); err != nil {
@@ -307,6 +307,8 @@ func doSearch(g *gocui.Gui, v *gocui.View) error {
 	searchTerm = "%" + msg.Buffer() + "%"
 	g.DeleteView("msg")
 	g.SetCurrentView("v2")
+	v2, _ := g.View("v2")
+	v2.Title = "Search: " + msg.Buffer()
 	refresh(g, v)
 	refreshV3(g, v)
 	return nil
@@ -386,7 +388,7 @@ func pageUp(g *gocui.Gui, v *gocui.View) error {
 		CurrOffset = 0
 		return nil
 	}
-	CurrOffset -= vSizeY
+	CurrOffset -= (vSizeY - 1)
 	refresh(g, v)
 	refreshV3(g, v)
 	return nil
@@ -395,41 +397,51 @@ func pageUp(g *gocui.Gui, v *gocui.View) error {
 func pageDown(g *gocui.Gui, v *gocui.View) error {
 	_, vSizeY := v.Size()
 	// end of results
-	if len(v2Meta) < vSizeY-1 {
+	if !followSearch && len(v2Meta) < vSizeY-1 {
 		return nil
 	}
-	CurrOffset += vSizeY
+	if followSearch && len(followPages) <= CurrOffset+vSizeY-1 {
+		return nil
+	}
+	CurrOffset += (vSizeY - 1)
 	refresh(g, v)
 	refreshV3(g, v)
 	return nil
 }
 func cursorDownV2(g *gocui.Gui, v *gocui.View) error {
 	if v != nil {
+
 		cx, cy := v.Cursor()
 		_, vSizeY := v.Size()
-		// v2 pagination
+
+		TheLog.Printf("len was %d, curr offset %d, vSizeY %d, cy %d", len(followPages), CurrOffset, vSizeY, cy)
+		if followSearch && (cy+CurrOffset+1) >= len(followPages) {
+			// end of list
+			return nil
+		}
+
+		TheLog.Printf("len was %d, curr offset %d, vSizeY %d, cy %d", len(v2Meta), CurrOffset, vSizeY, cy)
+		if !followSearch && len(v2Meta) != vSizeY-1 && (cy+1) >= len(v2Meta) {
+			// end of list
+			return nil
+		}
+
 		if (cy + 1) >= (vSizeY - 1) {
-			// end of page
+			// end of page / next page
 			if err := v.SetCursor(0, 0); err != nil {
 				if err := v.SetOrigin(0, 0); err != nil {
 					return err
 				}
 			}
-			CurrOffset += vSizeY
-			//ViewDB.Model(&followTarget).Offset(CurrOffset).Association("Follows").Find(&followPages)
+
 			TheLog.Println("len was", len(followPages), "curr offset", CurrOffset)
+
+			CurrOffset += (vSizeY - 1)
 			refresh(g, v)
 			refreshV3(g, v)
 			return nil
 		}
-		if followSearch && (cy+1) >= len(followPages) {
-			// end of list
-			return nil
-		}
-		if !followSearch && (cy+1) >= len(v2Meta) {
-			// end of list
-			return nil
-		}
+
 		if err := v.SetCursor(cx, cy+1); err != nil {
 			ox, oy := v.Origin()
 			if err := v.SetOrigin(ox, oy+1); err != nil {
@@ -478,10 +490,13 @@ func cursorUpV2(g *gocui.Gui, v *gocui.View) error {
 	if v != nil {
 		cx, cy := v.Cursor()
 		_, vSizeY := v.Size()
+		if cy == 0 && CurrOffset == 0 {
+			return nil
+		}
 		// page up
 		if cy == 0 {
-			if CurrOffset >= vSizeY {
-				CurrOffset -= vSizeY
+			if CurrOffset >= (vSizeY - 1) {
+				CurrOffset -= (vSizeY - 1)
 			} else {
 				CurrOffset = 0
 			}
@@ -664,11 +679,7 @@ func refreshRelays(g *gocui.Gui, v *gocui.View) error {
 	for {
 		var RelayStatuses []RelayStatus
 		ViewDB.Find(&RelayStatuses)
-		v4, err := g.View("v4")
-		if err != nil {
-			// handle error
-			//fmt.Println("error getting view")
-		}
+		v4, _ := g.View("v4")
 		v4.Clear()
 		for _, relayStatus := range RelayStatuses {
 			var shortStatus string
@@ -726,8 +737,9 @@ func config(g *gocui.Gui, v *gocui.View) error {
 			if len(theKey) != 64 {
 				fmt.Fprintf(v, "invalid key.. delete please: %s", theKey)
 			} else {
-				//fmt.Fprintf(v, "[%s ... ] for %s\n", theKey[0:5], acct.PubkeyNpub)
-				fmt.Fprintf(v, "[%s] for %s\n", theKey, acct.Pubkey)
+				fmt.Fprintf(v, "[%s ... ] for %s\n", theKey[0:5], acct.PubkeyNpub)
+				// full priv key printing
+				//fmt.Fprintf(v, "[%s] for %s\n", theKey, acct.Pubkey)
 			}
 		}
 
@@ -951,8 +963,8 @@ func follow(g *gocui.Gui, v *gocui.View) error {
 		v.SelFgColor = gocui.ColorBlack
 		v.Editable = false
 		v.KeybindOnEdit = true
-		fmt.Fprintf(v, "you have %d existing follows in our known data, check safu?\n", numFollows)
-		fmt.Fprintf(v, "follow %s %s %s?\n\n", m.Name, m.Nip05, m.PubkeyHex)
+		fmt.Fprintf(v, "you have %d existing follows in our known data, check safu?\n\n", numFollows)
+		fmt.Fprintf(v, "follow %s %s %s?\n", m.Name, m.Nip05, m.PubkeyHex)
 		if len(highlighted) > 0 {
 			fmt.Fprintf(v, "+bulk follow: selected additional %d highlighted follows\n", len(highlighted))
 			/*
@@ -976,7 +988,6 @@ func doFollow(g *gocui.Gui, v *gocui.View) error {
 	var m Metadata
 	if followSearch {
 		m = followPages[cy+CurrOffset]
-
 	} else {
 		m = v2Meta[cy]
 	}
@@ -1022,14 +1033,16 @@ func doFollow(g *gocui.Gui, v *gocui.View) error {
 	// calling Sign sets the event ID field and the event Sig field
 	ev.Sign(Decrypt(string(Password), accounts[0].Privatekey))
 	// create context with deadline and cancel
-	ctx, cancel := context.WithTimeout(CTX, 10*time.Second)
-	defer cancel()
-	TheLog.Println("sending event", ev)
-	for _, r := range nostrRelays {
-		result := r.Publish(CTX, ev)
-		TheLog.Println(result)
-		TheLog.Printf("published to %v", r.Publish(ctx, ev))
-	}
+	go func() {
+		ctx, cancel := context.WithTimeout(CTX, 10*time.Second)
+		defer cancel()
+		TheLog.Println("sending event", ev)
+		for _, r := range nostrRelays {
+			result := r.Publish(CTX, ev)
+			TheLog.Println(result)
+			TheLog.Printf("published to %v", r.Publish(ctx, ev))
+		}
+	}()
 
 	highlighted = []string{}
 	g.SetCurrentView("v2")
