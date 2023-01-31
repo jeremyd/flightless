@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/awesome-gocui/gocui"
-	"github.com/joho/godotenv"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -70,7 +69,7 @@ func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
 var TheLog *log.Logger
 
 func GetGormConnection() *gorm.DB {
-	file, err := os.OpenFile("nono.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	file, err := os.OpenFile("flextree-pro-gold.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		// Handle error
 		panic(err)
@@ -89,7 +88,7 @@ func GetGormConnection() *gorm.DB {
 
 	dsn, foundDsn := os.LookupEnv("DB")
 	if !foundDsn {
-		dsn = "nono.db?cache=shared&mode=rwc"
+		dsn = "flextree-pro-gold.db?cache=shared&mode=rwc"
 	}
 
 	db, dberr := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: newLogger})
@@ -111,10 +110,12 @@ var CTX context.Context
 
 func main() {
 
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
+	/*
+		err := godotenv.Load()
+		if err != nil {
+			log.Info("Error loading .env file, using defaults")
+		}
+	*/
 
 	CTX = context.Background()
 

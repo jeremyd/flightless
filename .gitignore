@@ -1,8 +1,7 @@
-nono
+flextree-pro-gold
 .env
 .env*
 mysql.env
 *.swp
-nono.log*
-nono.db
-nono.db*
+*.db*
+*.log*

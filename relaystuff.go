@@ -28,14 +28,15 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 	UpdateOrCreateRelayStatus(db, url, "connection established")
 
 	pubkey, foundPub := os.LookupEnv("PUBKEY")
-	var firstAcct Account
+
+	var activeAccount Account
 	foundAcct := true
-	ferr := db.First(&firstAcct).Error
+	ferr := db.First(&activeAccount, "active = ?", true).Error
 	if ferr != nil {
-		TheLog.Printf("failed to find an account: %s", ferr)
+		TheLog.Printf("failed to find an active account: %s", ferr)
 		foundAcct = false
 	} else {
-		pubkey = firstAcct.Pubkey
+		pubkey = activeAccount.Pubkey
 	}
 
 	var filters []nostr.Filter
@@ -214,8 +215,10 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				if notFoundError != nil {
 					TheLog.Printf("Creating blank metadata for %s\n", ev.PubKey)
 					person = Metadata{
-						PubkeyHex:         ev.PubKey,
-						TotalFollows:      len(allPTags),
+						PubkeyHex:    ev.PubKey,
+						TotalFollows: len(allPTags),
+						// set time to january 1st 1970
+						UpdatedAt:         time.Unix(0, 0),
 						ContactsUpdatedAt: ev.CreatedAt,
 					}
 					db.Create(&person)

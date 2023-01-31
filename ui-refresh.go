@@ -27,9 +27,9 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 	if followSearch {
 		for _, metadata := range followPages[CurrOffset:] {
 			if metadata.Nip05 != "" {
-				fmt.Fprintf(v, "%-30s %-30s \n", metadata.Name, metadata.Nip05)
+				fmt.Fprintf(v2, "%-30s %-30s \n", metadata.Name, metadata.Nip05)
 			} else {
-				fmt.Fprintf(v, "%-30s\n", metadata.Name)
+				fmt.Fprintf(v2, "%-30s\n", metadata.Name)
 			}
 		}
 	} else {
@@ -40,13 +40,12 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 		}
 		for _, metadata := range v2Meta {
 			if metadata.Nip05 != "" {
-				fmt.Fprintf(v, "%-30s %-30s \n", metadata.Name, metadata.Nip05)
+				fmt.Fprintf(v2, "%-30s %-30s \n", metadata.Name, metadata.Nip05)
 			} else {
-				fmt.Fprintf(v, "%-30s\n", metadata.Name)
+				fmt.Fprintf(v2, "%-30s\n", metadata.Name)
 			}
 		}
 	}
-
 	v2.Highlight = true
 	v2.SelBgColor = gocui.ColorCyan
 	v2.SelFgColor = gocui.ColorBlack
@@ -119,7 +118,7 @@ func refreshV5(g *gocui.Gui, v *gocui.View) error {
 		if em == nil && mm.Name != "" {
 			usename = mm.Name
 		}
-		fmt.Fprintf(v5, "account: %s, %s\n", usename, ac.PubkeyNpub)
+		fmt.Fprintf(v5, "account: %s, %s\n", usename, ac.Pubkey)
 	} else {
 		fmt.Fprintf(v5, "no account active\n")
 	}
