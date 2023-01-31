@@ -1,4 +1,4 @@
-module github.com/jeremyd/nono
+module github.com/jeremyd/flextree-pro-gold
 
 go 1.19
 
@@ -35,5 +35,3 @@ require (
 )
 
 replace github.com/nbd-wtf/go-nostr => ../go-nostr
-
-replace github.com/jeremyd/nono => ./

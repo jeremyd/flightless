@@ -4,189 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"syscall"
 	"time"
 
 	"github.com/awesome-gocui/gocui"
-	tcell "github.com/gdamore/tcell/v2"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
-func keybindings(g *gocui.Gui) error {
-	/* global for all Views */
-	// q key (quit)
-	if err := g.SetKeybinding("", rune(0x71), gocui.ModNone, quit); err != nil {
-		log.Panicln(err)
-	}
-	// s key (search)
-	if err := g.SetKeybinding("", rune(0x73), gocui.ModNone, search); err != nil {
-		log.Panicln(err)
-	}
-	// tab key (next window)
-	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, next); err != nil {
-		log.Panicln(err)
-	}
-	// r key (refresh)
-	if err := g.SetKeybinding("", rune(0x72), gocui.ModNone, refreshAll); err != nil {
-		log.Panicln(err)
-	}
-	// c key (Config)
-	if err := g.SetKeybinding("", rune(0x63), gocui.ModNone, config); err != nil {
-		log.Panicln(err)
-	}
-	// f key (Follow)
-	if err := g.SetKeybinding("", rune(0x66), gocui.ModNone, follow); err != nil {
-		log.Panicln(err)
-	}
-
-	/* v2 View (main) */
-	// cursor
-	if err := g.SetKeybinding("v2", gocui.KeyArrowDown, gocui.ModNone, cursorDownV2); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("v2", gocui.KeyArrowUp, gocui.ModNone, cursorUpV2); err != nil {
-		log.Panicln(err)
-	}
-	// vim cursor
-	// j key (down)
-	if err := g.SetKeybinding("v2", rune(0x6a), gocui.ModNone, cursorDownV2); err != nil {
-		log.Panicln(err)
-	}
-	// k key (up)
-	if err := g.SetKeybinding("v2", rune(0x6b), gocui.ModNone, cursorUpV2); err != nil {
-		log.Panicln(err)
-	}
-	// pageup and pagedown
-	if err := g.SetKeybinding("v2", gocui.KeyPgup, gocui.ModNone, pageUp); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("v2", gocui.KeyPgdn, gocui.ModNone, pageDown); err != nil {
-		log.Panicln(err)
-	}
-	// a key (add recommend relay)
-	if err := g.SetKeybinding("v2", rune(0x61), gocui.ModNone, addRelay); err != nil {
-		log.Panicln(err)
-	}
-	// spacebar key (select)
-	if err := g.SetKeybinding("v2", gocui.KeySpace, gocui.ModNone, selectBar); err != nil {
-		log.Panicln(err)
-	}
-	// enter key (ask)
-	if err := g.SetKeybinding("v2", gocui.KeyEnter, gocui.ModNone, askExpand); err != nil {
-		log.Panicln(err)
-	}
-
-	/* v4 View (Relay List) */
-	// d key (delete)
-	if err := g.SetKeybinding("v4", rune(0x64), gocui.ModNone, delRelay); err != nil {
-		log.Panicln(err)
-	}
-	// cursor
-	if err := g.SetKeybinding("v4", gocui.KeyArrowDown, gocui.ModNone, cursorDownV4); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("v4", gocui.KeyArrowUp, gocui.ModNone, cursorUpV4); err != nil {
-		log.Panicln(err)
-	}
-	// vim cursor
-	// j key (down)
-	if err := g.SetKeybinding("v4", rune(0x6a), gocui.ModNone, cursorDownV4); err != nil {
-		log.Panicln(err)
-	}
-	// k key (up)
-	if err := g.SetKeybinding("v4", rune(0x6b), gocui.ModNone, cursorUpV4); err != nil {
-		log.Panicln(err)
-	}
-	// a key (add new relay)
-	if err := g.SetKeybinding("v4", rune(0x61), gocui.ModNone, addRelay); err != nil {
-		log.Panicln(err)
-	}
-
-	/* v3 view (expanded metadata) */
-	// cursor
-	if err := g.SetKeybinding("v3", gocui.KeyArrowDown, gocui.ModNone, cursorDownV3); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("v3", gocui.KeyArrowUp, gocui.ModNone, cursorUpV3); err != nil {
-		log.Panicln(err)
-	}
-	// vim cursor
-	// j key (down)
-	if err := g.SetKeybinding("v3", rune(0x6a), gocui.ModNone, cursorDownV3); err != nil {
-		log.Panicln(err)
-	}
-	// k key (up)
-	if err := g.SetKeybinding("v3", rune(0x6b), gocui.ModNone, cursorUpV3); err != nil {
-		log.Panicln(err)
-	}
-
-	/* search view */
-	if err := g.SetKeybinding("msg", gocui.KeyEnter, gocui.ModNone, doSearch); err != nil {
-		log.Panicln(err)
-	}
-
-	/* addrelay view */
-	if err := g.SetKeybinding("addrelay", gocui.KeyEnter, gocui.ModNone, doAddRelay); err != nil {
-		log.Panicln(err)
-	}
-	//cancel key
-	if err := g.SetKeybinding("addrelay", gocui.KeyEsc, gocui.ModNone, cancelAddRelay); err != nil {
-		log.Panicln(err)
-	}
-
-	/* config view for accounts */
-	//cancel key
-	if err := g.SetKeybinding("config", gocui.KeyEsc, gocui.ModNone, cancelConfig); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("config", gocui.KeyEnter, gocui.ModNone, activateConfig); err != nil {
-		log.Panicln(err)
-	}
-	// unsupported: edit
-	//if err := g.SetKeybinding("config", gocui.KeyEnter, gocui.ModNone, configEdit); err != nil {
-	//	log.Panicln(err)
-	//}
-	// n key (new config)
-	if err := g.SetKeybinding("config", rune(0x6e), gocui.ModNone, configNew); err != nil {
-		log.Panicln(err)
-	}
-	// d key (delete config)
-	if err := g.SetKeybinding("config", rune(0x64), gocui.ModNone, doConfigDel); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("config", gocui.KeyArrowDown, gocui.ModNone, cursorDownConfig); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("config", gocui.KeyArrowUp, gocui.ModNone, cursorUpConfig); err != nil {
-		log.Panicln(err)
-	}
-	/* config submenu (new/edit) */
-	//cancel key
-	if err := g.SetKeybinding("confignew", gocui.KeyEsc, gocui.ModNone, cancelConfigNew); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.SetKeybinding("confignew", gocui.KeyEnter, gocui.ModNone, doConfigNew); err != nil {
-		log.Panicln(err)
-	}
-
-	/* follow view */
-	// n key (for NO)
-	if err := g.SetKeybinding("follow", rune(0x6e), gocui.ModNone, cancelFollow); err != nil {
-		log.Panicln(err)
-	}
-	// y key for (YES)
-	if err := g.SetKeybinding("follow", rune(0x79), gocui.ModNone, doFollow); err != nil {
-		log.Panicln(err)
-	}
-
-	return nil
-}
-
 var selectableViews = []string{"v2", "v3", "v4"}
 var curViewNum = 0
+var v2Meta []Metadata
+var searchTerm = ""
+var followSearch = false
+var CurrOffset = 0
+var followPages []Metadata
+var followTarget Metadata
+var highlighted []string
 
 func next(g *gocui.Gui, v *gocui.View) error {
 	for _, view := range selectableViews {
@@ -208,87 +42,6 @@ func next(g *gocui.Gui, v *gocui.View) error {
 	newV.Highlight = true
 	newV.SelBgColor = gocui.ColorCyan
 	newV.SelFgColor = gocui.ColorBlack
-	return nil
-}
-
-func layout(g *gocui.Gui) error {
-	//useBg := gocui.Attribute(tcell.ColorSlateBlue)
-
-	useBg := gocui.NewRGBColor(0, 0, 200)
-	useFg := gocui.Attribute(tcell.ColorWhite)
-	useFrame := gocui.NewRGBColor(200, 200, 200)
-	maxX, maxY := g.Size()
-	if v, err := g.SetView("v1", -1, -1, maxX, 1, 0); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Editable = false
-		v.Wrap = false
-		v.Frame = false
-		v.BgColor = useBg
-		v.FgColor = useFg
-		fmt.Fprint(v, AppInfo)
-
-	}
-
-	if v, err := g.SetView("v2", 0, 1, maxX-20, maxY-20, 0); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		//myTitle := fmt.Sprintf("%-30s %-30s \n", "Name", "Nip05")
-		//v.Title = "Profiles"
-		v.Wrap = false
-		v.Autoscroll = false
-		v.BgColor = useBg
-		v.FgColor = useFg
-		v.FrameColor = useFrame
-		v.Editable = false
-		refresh(g, v)
-		g.SetCurrentView("v2")
-	}
-
-	if v, err := g.SetView("v3", 0, maxY-21, maxX-20, maxY-6, 1); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Title = "Details"
-		v.Wrap = true
-		v.Autoscroll = true
-		v.BgColor = useBg
-		v.FgColor = useFg
-		v.FrameColor = useFrame
-		v.Editable = false
-		refreshV3(g, v)
-	}
-
-	if v, err := g.SetView("v4", maxX-29, 1, maxX-1, maxY-6, 4); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Title = "Relays"
-		v.Editable = false
-		v.Wrap = false
-		v.Autoscroll = true
-		v.BgColor = useBg
-		v.FgColor = useFg
-		v.FrameColor = useFrame
-		refreshRelays(g, v)
-	}
-
-	if v, err := g.SetView("v5", 0, maxY-6, maxX-1, maxY-1, 1); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Title = "Keybinds"
-		v.Editable = false
-		v.Frame = true
-		v.BgColor = useBg
-		v.FgColor = useFg
-		v.FrameColor = useFrame
-		refreshV5(g, v)
-
-	}
-
 	return nil
 }
 
@@ -347,51 +100,6 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 	}()
 	return nil
 }
-
-var v2Meta []Metadata
-var searchTerm = ""
-var followSearch = false
-
-func refresh(g *gocui.Gui, v *gocui.View) error {
-	//g.SetCurrentView("v2")
-	v, err := g.View("v2")
-	if err != nil {
-		//fmt.Println("error getting view")
-	}
-
-	_, vY := v.Size()
-
-	v.Clear()
-	if followSearch {
-		for _, metadata := range followPages[CurrOffset:] {
-			if metadata.Nip05 != "" {
-				fmt.Fprintf(v, "%-30s %-30s \n", metadata.Name, metadata.Nip05)
-			} else {
-				fmt.Fprintf(v, "%-30s\n", metadata.Name)
-			}
-		}
-	} else {
-		if searchTerm != "" && searchTerm != "%%" {
-			ViewDB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name like ? or nip05 like ? or pubkey_hex like ? or pubkey_npub like ?", searchTerm, searchTerm, searchTerm, searchTerm)
-		} else {
-			ViewDB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name != ?", "")
-		}
-		for _, metadata := range v2Meta {
-			if metadata.Nip05 != "" {
-				fmt.Fprintf(v, "%-30s %-30s \n", metadata.Name, metadata.Nip05)
-			} else {
-				fmt.Fprintf(v, "%-30s\n", metadata.Name)
-			}
-		}
-	}
-
-	v.Highlight = true
-	v.SelBgColor = gocui.ColorCyan
-	v.SelFgColor = gocui.ColorBlack
-	return nil
-}
-
-var CurrOffset = 0
 
 func pageUp(g *gocui.Gui, v *gocui.View) error {
 	_, vSizeY := v.Size()
@@ -559,24 +267,6 @@ func cursorUpV4(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func refreshV3(g *gocui.Gui, v *gocui.View) error {
-	v2, _ := g.View("v2")
-	_, newCy := v2.Cursor()
-	v3, _ := g.View("v3")
-	v3.Clear()
-	if followSearch {
-		if len(followPages) > newCy+CurrOffset {
-			fmt.Fprintf(v3, "%s", displayMetadataAsText(followPages[newCy+CurrOffset]))
-
-		}
-	} else {
-		if len(v2Meta) > newCy {
-			fmt.Fprintf(v3, "%s", displayMetadataAsText(v2Meta[newCy]))
-		}
-	}
-	return nil
-}
-
 func displayMetadataAsText(m Metadata) string {
 	// Use GORM API build SQL
 	var followersCount int64
@@ -682,44 +372,6 @@ func delRelay(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func refreshRelays(g *gocui.Gui, v *gocui.View) error {
-	for {
-		var RelayStatuses []RelayStatus
-		ViewDB.Find(&RelayStatuses)
-		v4, _ := g.View("v4")
-		v4.Clear()
-		for _, relayStatus := range RelayStatuses {
-			var shortStatus string
-			if relayStatus.Status == "connection established" {
-				shortStatus = "⌛✅"
-			} else if relayStatus.Status == "EOSE" {
-				shortStatus = "✅"
-			} else if relayStatus.Status == "waiting" {
-				shortStatus = "⌛"
-			} else {
-				shortStatus = "❌"
-			}
-
-			fmt.Fprintf(v4, "%s %s\n", shortStatus, relayStatus.Url)
-		}
-		return nil
-	}
-}
-
-func refreshAll(g *gocui.Gui, v *gocui.View) error {
-	curView := g.CurrentView().Name()
-	if curView == "v3" {
-		refreshV3(g, v)
-	} else if curView == "v4" {
-		refreshRelays(g, v)
-	} else { //v2
-		refresh(g, v)
-		refreshV3(g, v)
-		refreshRelays(g, v)
-	}
-	return nil
-}
-
 func cancelAddRelay(g *gocui.Gui, v *gocui.View) error {
 	g.DeleteView("addrelay")
 	g.SetCurrentView("v2")
@@ -811,39 +463,6 @@ func activateConfig(
 	g.DeleteView("config")
 	refreshV5(g, v)
 	g.SetCurrentView("v2")
-	return nil
-}
-
-func configEdit(
-	g *gocui.Gui,
-	v *gocui.View,
-) error {
-	maxX, maxY := g.Size()
-	cView, _ := g.View("config")
-	_, cy := cView.Cursor()
-	accounts := []Account{}
-	aerr := ViewDB.Find(&accounts).Error
-	if aerr != nil {
-		TheLog.Printf("error getting accounts: %s", aerr)
-	}
-	editThis := Decrypt(string(Password), accounts[cy].Privatekey)
-	g.DeleteView("config")
-	if v, err := g.SetView("confignew", maxX/2-50, maxY/2-1, maxX/2+50, maxY/2+1, 0); err != nil {
-		if !errors.Is(err, gocui.ErrUnknownView) {
-			return err
-		}
-
-		v.Title = "New/Edit Private Key - [Enter]Save - [ESC]Cancel -"
-		v.Highlight = true
-		v.SelBgColor = gocui.ColorGreen
-		v.SelFgColor = gocui.ColorBlack
-		v.Editable = true
-		v.KeybindOnEdit = true
-		if _, err := g.SetCurrentView("confignew"); err != nil {
-			return err
-		}
-		fmt.Fprint(v, editThis)
-	}
 	return nil
 }
 
@@ -1097,8 +716,6 @@ func cancelFollow(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-var highlighted []string
-
 // replace the highlighted slice with the last element and return smaller slice
 func removeFromHighlight(s []string, i int) []string {
 	s[i] = s[len(s)-1]
@@ -1141,9 +758,6 @@ func selectBar(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-var followPages []Metadata
-var followTarget Metadata
-
 func askExpand(g *gocui.Gui, v *gocui.View) error {
 	if v != nil {
 		v2, _ := g.View("v2")
@@ -1171,39 +785,6 @@ func askExpand(g *gocui.Gui, v *gocui.View) error {
 			refresh(g, v2)
 			refreshV3(g, v2)
 		}
-	}
-	return nil
-}
-
-func refreshV5(g *gocui.Gui, v *gocui.View) error {
-	v5, _ := g.View("v5")
-	v5.Clear()
-	// HELP BUTTONS
-	NoticeColor := "\033[1;36m%s\033[0m"
-	s := fmt.Sprintf("(%s)earch", fmt.Sprintf(NoticeColor, "s"))
-	q := fmt.Sprintf("(%s)uit", fmt.Sprintf(NoticeColor, "q"))
-	f := fmt.Sprintf("(%s)efresh", fmt.Sprintf(NoticeColor, "r"))
-	t := fmt.Sprintf("(%s)next window", fmt.Sprintf(NoticeColor, "tab"))
-	a := fmt.Sprintf("(%s)dd relay", fmt.Sprintf(NoticeColor, "a"))
-
-	fmt.Fprintf(v5, "%-30s%-30s%-30s%-30s%-30s\n", s, q, f, t, a)
-	ff := fmt.Sprintf("(%s)ollow", fmt.Sprintf(NoticeColor, "f"))
-	u := fmt.Sprintf("(%s)n-follow", fmt.Sprintf(NoticeColor, "u"))
-	m := fmt.Sprintf("(%s)ute", fmt.Sprintf(NoticeColor, "m"))
-	fmt.Fprintf(v5, "%-30s%-30s%-30s\n\n", ff, u, m)
-
-	var ac Account
-	var mm Metadata
-	ea := ViewDB.First(&ac, "active = ?", true).Error
-	if ea == nil {
-		em := ViewDB.First(&mm, "pubkey_hex = ?", ac.Pubkey).Error
-		usename := "unknown"
-		if em == nil && mm.Name != "" {
-			usename = mm.Name
-		}
-		fmt.Fprintf(v5, "account: %s, %s\n", usename, ac.PubkeyNpub)
-	} else {
-		fmt.Fprintf(v5, "no account active\n")
 	}
 	return nil
 }
