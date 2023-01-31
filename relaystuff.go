@@ -139,7 +139,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 
 	go func() {
 		for ev := range sub.Events {
-			TheLog.Printf("got event kind %d from %s", ev.Kind, relay.URL)
+			//TheLog.Printf("got event kind %d from %s", ev.Kind, relay.URL)
 			if ev.Kind == 0 {
 				// Metadata
 				m := Metadata{}
@@ -148,20 +148,35 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 					TheLog.Println(err)
 				}
 				m.PubkeyHex = ev.PubKey
+				npub, errEncode := nip19.EncodePublicKey(ev.PubKey)
+				if errEncode == nil {
+					m.PubkeyNpub = npub
+				}
+				m.UpdatedAt = ev.CreatedAt
 				if len(m.Picture) > 65535 {
 					TheLog.Println("too big a picture for profile, skipping" + ev.PubKey)
 					m.Picture = ""
 					//continue
 				}
-				rowsUpdated := db.Model(Metadata{}).Where("pubkey_hex = ?", m.PubkeyHex).Updates(&m).RowsAffected
-				if rowsUpdated == 0 {
+				// check timestamps
+				var checkMeta Metadata
+				notFoundErr := db.First(&checkMeta, "pubkey_hex = ?", m.PubkeyHex).Error
+				if notFoundErr != nil {
 					err := db.Save(&m).Error
 					if err != nil {
 						TheLog.Println(err)
 					}
 					TheLog.Printf("Created metadata for %s, %s\n", m.Name, m.Nip05)
 				} else {
-					TheLog.Printf("Updated metadata for %s, %s\n", m.Name, m.Nip05)
+					if checkMeta.UpdatedAt.After(ev.CreatedAt) {
+						TheLog.Println("skipping old metadata for " + ev.PubKey)
+						continue
+					} else {
+						rowsUpdated := db.Model(Metadata{}).Where("pubkey_hex = ?", m.PubkeyHex).Updates(&m).RowsAffected
+						if rowsUpdated > 0 {
+							TheLog.Printf("Updated metadata for %s, %s\n", m.Name, m.Nip05)
+						}
+					}
 				}
 			} else if ev.Kind == 2 {
 				// recommend relay
@@ -190,6 +205,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 						}*/
 				}
 			} else if ev.Kind == 3 {
+
 				// Contact List
 				pTags := []string{"p"}
 				allPTags := ev.Tags.GetAll(pTags)
@@ -198,13 +214,21 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				if notFoundError != nil {
 					TheLog.Printf("Creating blank metadata for %s\n", ev.PubKey)
 					person = Metadata{
-						PubkeyHex:    ev.PubKey,
-						TotalFollows: len(allPTags),
+						PubkeyHex:         ev.PubKey,
+						TotalFollows:      len(allPTags),
+						ContactsUpdatedAt: ev.CreatedAt,
 					}
 					db.Create(&person)
 				} else {
-					db.Model(&person).Update("total_follows", len(allPTags))
-					TheLog.Printf("updating (%d) follows for %s: %s\n", len(allPTags), person.Name, person.PubkeyHex)
+					if person.ContactsUpdatedAt.After(ev.CreatedAt) {
+						// double check the timestamp for this follow list, don't update if older than most recent
+						TheLog.Printf("skipping old contact list for " + ev.PubKey)
+						continue
+					} else {
+						db.Model(&person).Update("total_follows", len(allPTags))
+						db.Model(&person).Update("contacts_updated_at", ev.CreatedAt)
+						TheLog.Printf("updating (%d) follows for %s: %s\n", len(allPTags), person.Name, person.PubkeyHex)
+					}
 				}
 
 				// purge followers that have been 'unfollowed'
@@ -242,8 +266,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 							TheLog.Println("Error creating user for follow: ", createNewErr)
 						}
 						// use gorm insert statement to update the join table
-						errExec := db.Exec("insert or ignore into metadata_follows (metadata_pubkey_hex, follow_pubkey_hex) values (?, ?)", person.PubkeyHex, newUser.PubkeyHex).Error
-						CheckAndReportGormError(errExec, []string{"1062"})
+						db.Exec("insert or ignore into metadata_follows (metadata_pubkey_hex, follow_pubkey_hex) values (?, ?)", person.PubkeyHex, newUser.PubkeyHex)
 					} else {
 						// follow user found,
 						// update the follow user's recommend server suggestion
@@ -261,8 +284,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 							}
 						}
 						// use gorm insert statement to update the join table
-						errExec := db.Exec("insert or ignore into metadata_follows (metadata_pubkey_hex, follow_pubkey_hex) values (?, ?)", person.PubkeyHex, followPerson.PubkeyHex).Error
-						CheckAndReportGormError(errExec, []string{"1062"})
+						db.Exec("insert or ignore into metadata_follows (metadata_pubkey_hex, follow_pubkey_hex) values (?, ?)", person.PubkeyHex, followPerson.PubkeyHex)
 					}
 				}
 			}

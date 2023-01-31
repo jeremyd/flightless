@@ -90,6 +90,15 @@ func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("v4", gocui.KeyArrowUp, gocui.ModNone, cursorUpV4); err != nil {
 		log.Panicln(err)
 	}
+	// vim cursor
+	// j key (down)
+	if err := g.SetKeybinding("v4", rune(0x6a), gocui.ModNone, cursorDownV4); err != nil {
+		log.Panicln(err)
+	}
+	// k key (up)
+	if err := g.SetKeybinding("v4", rune(0x6b), gocui.ModNone, cursorUpV4); err != nil {
+		log.Panicln(err)
+	}
 	// a key (add new relay)
 	if err := g.SetKeybinding("v4", rune(0x61), gocui.ModNone, addRelay); err != nil {
 		log.Panicln(err)
@@ -101,6 +110,15 @@ func keybindings(g *gocui.Gui) error {
 		log.Panicln(err)
 	}
 	if err := g.SetKeybinding("v3", gocui.KeyArrowUp, gocui.ModNone, cursorUpV3); err != nil {
+		log.Panicln(err)
+	}
+	// vim cursor
+	// j key (down)
+	if err := g.SetKeybinding("v3", rune(0x6a), gocui.ModNone, cursorDownV3); err != nil {
+		log.Panicln(err)
+	}
+	// k key (up)
+	if err := g.SetKeybinding("v3", rune(0x6b), gocui.ModNone, cursorUpV3); err != nil {
 		log.Panicln(err)
 	}
 
@@ -121,6 +139,9 @@ func keybindings(g *gocui.Gui) error {
 	/* config view for accounts */
 	//cancel key
 	if err := g.SetKeybinding("config", gocui.KeyEsc, gocui.ModNone, cancelConfig); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding("config", gocui.KeyEnter, gocui.ModNone, activateConfig); err != nil {
 		log.Panicln(err)
 	}
 	// unsupported: edit
@@ -206,7 +227,8 @@ func layout(g *gocui.Gui) error {
 		v.Frame = false
 		v.BgColor = useBg
 		v.FgColor = useFg
-		fmt.Fprint(v, "FlexTree Pro Gold v0.0.1")
+		fmt.Fprint(v, AppInfo)
+
 	}
 
 	if v, err := g.SetView("v2", 0, 1, maxX-20, maxY-20, 0); err != nil {
@@ -263,19 +285,8 @@ func layout(g *gocui.Gui) error {
 		v.BgColor = useBg
 		v.FgColor = useFg
 		v.FrameColor = useFrame
-		// HELP BUTTONS
-		NoticeColor := "\033[1;36m%s\033[0m"
-		s := fmt.Sprintf("(%s)earch", fmt.Sprintf(NoticeColor, "s"))
-		q := fmt.Sprintf("(%s)uit", fmt.Sprintf(NoticeColor, "q"))
-		f := fmt.Sprintf("(%s)efresh", fmt.Sprintf(NoticeColor, "r"))
-		t := fmt.Sprintf("(%s)next window", fmt.Sprintf(NoticeColor, "tab"))
-		a := fmt.Sprintf("(%s)dd relay", fmt.Sprintf(NoticeColor, "a"))
+		refreshV5(g, v)
 
-		fmt.Fprintf(v, "%-30s%-30s%-30s%-30s%-30s", s, q, f, t, a)
-		ff := fmt.Sprintf("(%s)ollow", fmt.Sprintf(NoticeColor, "f"))
-		u := fmt.Sprintf("(%s)n-follow", fmt.Sprintf(NoticeColor, "u"))
-		m := fmt.Sprintf("(%s)ute", fmt.Sprintf(NoticeColor, "m"))
-		fmt.Fprintf(v, "%-30s%-30s%-30s\n", ff, u, m)
 	}
 
 	return nil
@@ -361,7 +372,7 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 		}
 	} else {
 		if searchTerm != "" && searchTerm != "%%" {
-			ViewDB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name like ? or nip05 like ? or pubkey_hex like ?", searchTerm, searchTerm, searchTerm)
+			ViewDB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name like ? or nip05 like ? or pubkey_hex like ? or pubkey_npub like ?", searchTerm, searchTerm, searchTerm, searchTerm)
 		} else {
 			ViewDB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name != ?", "")
 		}
@@ -414,13 +425,11 @@ func cursorDownV2(g *gocui.Gui, v *gocui.View) error {
 		cx, cy := v.Cursor()
 		_, vSizeY := v.Size()
 
-		TheLog.Printf("len was %d, curr offset %d, vSizeY %d, cy %d", len(followPages), CurrOffset, vSizeY, cy)
 		if followSearch && (cy+CurrOffset+1) >= len(followPages) {
 			// end of list
 			return nil
 		}
 
-		TheLog.Printf("len was %d, curr offset %d, vSizeY %d, cy %d", len(v2Meta), CurrOffset, vSizeY, cy)
 		if !followSearch && len(v2Meta) != vSizeY-1 && (cy+1) >= len(v2Meta) {
 			// end of list
 			return nil
@@ -433,9 +442,6 @@ func cursorDownV2(g *gocui.Gui, v *gocui.View) error {
 					return err
 				}
 			}
-
-			TheLog.Println("len was", len(followPages), "curr offset", CurrOffset)
-
 			CurrOffset += (vSizeY - 1)
 			refresh(g, v)
 			refreshV3(g, v)
@@ -587,13 +593,14 @@ func displayMetadataAsText(m Metadata) string {
 		useserver = servers[0].Url
 	}
 
-	x := fmt.Sprintf("%-20sFollowers: %4d, Follows: %4d [%4s]\ndisplay_name: %20s\npubkey: %20s\nnip05: %20s\nwebsite: %20s\nPicture: %20s\nlud06: %20s\nlud16: %20s\n\nabout:\n%s\n",
+	x := fmt.Sprintf("%-20sFollowers: %4d, Follows: %4d [%4s]\ndisplay_name: %20s\npubkey hex: %20s\npubkey npub: %20s\nnip05: %20s\nwebsite: %20s\nPicture: %20s\nlud06: %20s\nlud16: %20s\n\nabout:\n%s\n",
 		m.Name,
 		followersCount,
 		followsCount,
 		useserver,
 		m.DisplayName,
 		m.PubkeyHex,
+		m.PubkeyNpub,
 		m.Nip05,
 		m.Website,
 		m.Picture,
@@ -743,7 +750,7 @@ func config(g *gocui.Gui, v *gocui.View) error {
 			}
 		}
 
-		v.Title = "Config Private Keys - [ESC]Cancel - [n]ew - [d]elete -"
+		v.Title = "Config Private Keys - [Enter]Use key - [ESC]Cancel - [n]ew key - [d]elete key -"
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
@@ -778,6 +785,32 @@ func configNew(
 			return err
 		}
 	}
+	return nil
+}
+
+func activateConfig(
+	g *gocui.Gui,
+	v *gocui.View,
+) error {
+	cView, _ := g.View("config")
+	_, cy := cView.Cursor()
+	accounts := []Account{}
+	aerr := ViewDB.Find(&accounts).Error
+	if aerr != nil {
+		TheLog.Printf("error getting accounts: %s", aerr)
+	}
+	for i, acct := range accounts {
+		if i != cy {
+			acct.Active = false
+			ViewDB.Save(&acct)
+		}
+	}
+
+	accounts[cy].Active = true
+	ViewDB.Save(accounts[cy])
+	g.DeleteView("config")
+	refreshV5(g, v)
+	g.SetCurrentView("v2")
 	return nil
 }
 
@@ -925,10 +958,11 @@ func follow(g *gocui.Gui, v *gocui.View) error {
 	maxX, maxY := g.Size()
 
 	// use account 0 for now
-	accounts := []Account{}
-	aerr := ViewDB.Find(&accounts).Error
+	account := Account{}
+	aerr := ViewDB.Find(&account, "active = ?", true).Error
 	if aerr != nil {
-		TheLog.Printf("error getting accounts: %s", aerr)
+		TheLog.Printf("error getting active account: %s", aerr)
+		return nil
 	}
 
 	cView, _ := g.View("v2")
@@ -950,7 +984,7 @@ func follow(g *gocui.Gui, v *gocui.View) error {
 	}
 
 	var numFollows int64
-	ViewDB.Table("metadata_follows").Where("metadata_pubkey_hex = ?", accounts[0].Pubkey).Count(&numFollows)
+	ViewDB.Table("metadata_follows").Where("metadata_pubkey_hex = ?", account.Pubkey).Count(&numFollows)
 
 	//lenWindow := len(highlighted) + 2
 	if v, err := g.SetView("follow", maxX/2-50, maxY/2-5, maxX/2+50, maxY/2+2, 0); err != nil {
@@ -992,19 +1026,25 @@ func doFollow(g *gocui.Gui, v *gocui.View) error {
 		m = v2Meta[cy]
 	}
 
-	// use account 0 for now
-	accounts := []Account{}
-	aerr := ViewDB.Find(&accounts).Error
+	account := Account{}
+	aerr := ViewDB.First(&account, "active = ?", true).Error
 	if aerr != nil {
-		TheLog.Printf("error getting accounts: %s", aerr)
+		TheLog.Printf("error getting active account: %s", aerr)
+		return nil
 	}
 
 	// get list of current follows
 	var me Metadata
-	ViewDB.First(&me, "pubkey_hex = ?", accounts[0].Pubkey)
+	err := ViewDB.First(&me, "pubkey_hex = ?", account.Pubkey).Error
+	if err != nil {
+		TheLog.Printf("error getting metadata for account pubkey: %s", err)
+	}
+	TheLog.Printf("%v", me)
 	var curFollows []Metadata
-	ViewDB.Model(&me).Association("Follows").Find(&curFollows)
-
+	assocError := ViewDB.Model(&me).Association("Follows").Find(&curFollows)
+	if assocError != nil {
+		TheLog.Printf("error getting follows for account: %s", assocError)
+	}
 	TheLog.Println("current follows", len(curFollows))
 
 	var tags nostr.Tags
@@ -1023,7 +1063,7 @@ func doFollow(g *gocui.Gui, v *gocui.View) error {
 	}
 
 	ev := nostr.Event{
-		PubKey:    accounts[0].Pubkey,
+		PubKey:    account.Pubkey,
 		CreatedAt: time.Now(),
 		Kind:      nostr.KindContactList,
 		Tags:      tags,
@@ -1031,7 +1071,7 @@ func doFollow(g *gocui.Gui, v *gocui.View) error {
 	}
 
 	// calling Sign sets the event ID field and the event Sig field
-	ev.Sign(Decrypt(string(Password), accounts[0].Privatekey))
+	ev.Sign(Decrypt(string(Password), account.Privatekey))
 	// create context with deadline and cancel
 	go func() {
 		ctx, cancel := context.WithTimeout(CTX, 10*time.Second)
@@ -1112,7 +1152,6 @@ func askExpand(g *gocui.Gui, v *gocui.View) error {
 			followTarget := followPages[cy+CurrOffset]
 			CurrOffset = 0
 			ViewDB.Model(&followTarget).Offset(CurrOffset).Association("Follows").Find(&followPages)
-			TheLog.Println("len was", len(followPages), "curr offset", CurrOffset)
 			if len(followPages) > 0 {
 				TheLog.Println("current follows", len(followPages))
 				v2.Title = fmt.Sprintf("%s/follows", followTarget.Name)
@@ -1132,6 +1171,39 @@ func askExpand(g *gocui.Gui, v *gocui.View) error {
 			refresh(g, v2)
 			refreshV3(g, v2)
 		}
+	}
+	return nil
+}
+
+func refreshV5(g *gocui.Gui, v *gocui.View) error {
+	v5, _ := g.View("v5")
+	v5.Clear()
+	// HELP BUTTONS
+	NoticeColor := "\033[1;36m%s\033[0m"
+	s := fmt.Sprintf("(%s)earch", fmt.Sprintf(NoticeColor, "s"))
+	q := fmt.Sprintf("(%s)uit", fmt.Sprintf(NoticeColor, "q"))
+	f := fmt.Sprintf("(%s)efresh", fmt.Sprintf(NoticeColor, "r"))
+	t := fmt.Sprintf("(%s)next window", fmt.Sprintf(NoticeColor, "tab"))
+	a := fmt.Sprintf("(%s)dd relay", fmt.Sprintf(NoticeColor, "a"))
+
+	fmt.Fprintf(v5, "%-30s%-30s%-30s%-30s%-30s\n", s, q, f, t, a)
+	ff := fmt.Sprintf("(%s)ollow", fmt.Sprintf(NoticeColor, "f"))
+	u := fmt.Sprintf("(%s)n-follow", fmt.Sprintf(NoticeColor, "u"))
+	m := fmt.Sprintf("(%s)ute", fmt.Sprintf(NoticeColor, "m"))
+	fmt.Fprintf(v5, "%-30s%-30s%-30s\n\n", ff, u, m)
+
+	var ac Account
+	var mm Metadata
+	ea := ViewDB.First(&ac, "active = ?", true).Error
+	if ea == nil {
+		em := ViewDB.First(&mm, "pubkey_hex = ?", ac.Pubkey).Error
+		usename := "unknown"
+		if em == nil && mm.Name != "" {
+			usename = mm.Name
+		}
+		fmt.Fprintf(v5, "account: %s, %s\n", usename, ac.PubkeyNpub)
+	} else {
+		fmt.Fprintf(v5, "no account active\n")
 	}
 	return nil
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -15,20 +14,24 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+var AppInfo = "FlexTree Pro Gold v0.0.1"
+
 type Metadata struct {
-	PubkeyHex    string `gorm:"primaryKey;size:65"`
-	Name         string `gorm:"size:1024"`
-	About        string `gorm:"size:4096"`
-	Nip05        string `gorm:"size:512"`
-	Lud06        string `gorm:"size:2048"`
-	Lud16        string `gorm:"size:512"`
-	Website      string `gorm:"size:512"`
-	DisplayName  string `gorm:"size:512"`
-	Picture      string `gorm:"type:text;size:65535"`
-	TotalFollows int
-	UpdatedAt    time.Time         `gorm:"autoUpdateTime"`
-	Follows      []*Metadata       `gorm:"many2many:metadata_follows"`
-	Servers      []RecommendServer `gorm:"foreignKey:PubkeyHex;references:PubkeyHex"`
+	PubkeyHex         string `gorm:"primaryKey;size:65"`
+	PubkeyNpub        string `gorm:"size:65"`
+	Name              string `gorm:"size:1024"`
+	About             string `gorm:"size:4096"`
+	Nip05             string `gorm:"size:512"`
+	Lud06             string `gorm:"size:2048"`
+	Lud16             string `gorm:"size:512"`
+	Website           string `gorm:"size:512"`
+	DisplayName       string `gorm:"size:512"`
+	Picture           string `gorm:"type:text;size:65535"`
+	TotalFollows      int
+	UpdatedAt         time.Time `gorm:"autoUpdateTime"`
+	ContactsUpdatedAt time.Time
+	Follows           []*Metadata       `gorm:"many2many:metadata_follows"`
+	Servers           []RecommendServer `gorm:"foreignKey:PubkeyHex;references:PubkeyHex"`
 }
 
 type RecommendServer struct {
@@ -46,36 +49,15 @@ type RelayStatus struct {
 	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 }
 
-type GormErr struct {
-	Number  int    `json:"Number"`
-	Message string `json:"Message"`
-}
-
 type Account struct {
 	Pubkey     string `gorm:"primaryKey;size:65"`
 	PubkeyNpub string `gorm:"size:65"`
 	Privatekey string `gorm:"primaryKey;size:65"` // encrypted
+	Active     bool
 }
 
 type Login struct {
 	PasswordHash string `gorm:"size:43"` //salted and hashed
-}
-
-func CheckAndReportGormError(err error, allowErrors []string) bool {
-	if err != nil {
-		for _, e := range allowErrors {
-			if err.Error() == e {
-				//fmt.Println("known error: " + e)
-				return true
-			}
-		}
-		byteErr, _ := json.Marshal(err)
-		var newError GormErr
-		json.Unmarshal((byteErr), &newError)
-		//fmt.Println(newError)
-		return false
-	}
-	return true
 }
 
 func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
@@ -94,7 +76,7 @@ func GetGormConnection() *gorm.DB {
 		panic(err)
 	}
 
-	TheLog = log.New(file, "\r\n", log.LstdFlags) // io writer
+	TheLog = log.New(file, "", log.LstdFlags) // io writer
 	newLogger := logger.New(
 		TheLog,
 		logger.Config{
