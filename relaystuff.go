@@ -70,8 +70,12 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				Authors: []string{pubkey},
 			},
 			{
-				Kinds: []int{0, 2, 3},
-				Limit: 100,
+				Kinds: []int{0, 2},
+				Limit: 1000,
+			},
+			{
+				Kinds: []int{3},
+				Limit: 1000,
 			},
 			{
 				Kinds:   []int{0, 2},

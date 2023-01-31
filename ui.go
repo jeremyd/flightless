@@ -544,8 +544,8 @@ func refreshV3(g *gocui.Gui, v *gocui.View) error {
 	v3, _ := g.View("v3")
 	v3.Clear()
 	if followSearch {
-		if len(followPages) > newCy {
-			fmt.Fprintf(v3, "%s", displayMetadataAsText(followPages[newCy]))
+		if len(followPages) > newCy+CurrOffset {
+			fmt.Fprintf(v3, "%s", displayMetadataAsText(followPages[newCy+CurrOffset]))
 
 		}
 	} else {
@@ -940,8 +940,8 @@ func follow(g *gocui.Gui, v *gocui.View) error {
 	var numFollows int64
 	ViewDB.Table("metadata_follows").Where("metadata_pubkey_hex = ?", accounts[0].Pubkey).Count(&numFollows)
 
-	lenWindow := len(highlighted) + 2
-	if v, err := g.SetView("follow", maxX/2-50, maxY/2-lenWindow, maxX/2+50, maxY/2+2, 0); err != nil {
+	//lenWindow := len(highlighted) + 2
+	if v, err := g.SetView("follow", maxX/2-50, maxY/2-5, maxX/2+50, maxY/2+2, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
