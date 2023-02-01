@@ -769,8 +769,6 @@ func doFollow(g *gocui.Gui, v *gocui.View) error {
 	if assocError != nil {
 		TheLog.Printf("error getting follows for account: %s", assocError)
 	}
-	TheLog.Println("current follows", len(curFollows))
-
 	var tags nostr.Tags
 	// todo: set the relay nicely!
 	for _, follow := range curFollows {
@@ -800,11 +798,11 @@ func doFollow(g *gocui.Gui, v *gocui.View) error {
 	go func() {
 		ctx, cancel := context.WithTimeout(CTX, 10*time.Second)
 		defer cancel()
-		TheLog.Println("sending event", ev)
 		for _, r := range nostrRelays {
+			TheLog.Printf("publishing contact list (%d follows) to %s\n", len(tags), r.URL)
 			result := r.Publish(CTX, ev)
 			TheLog.Println(result)
-			TheLog.Printf("published to %v", r.Publish(ctx, ev))
+			TheLog.Printf("published to %s %v", r.URL, r.Publish(ctx, ev))
 		}
 	}()
 

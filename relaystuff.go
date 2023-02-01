@@ -16,6 +16,15 @@ import (
 var nostrSubs []*nostr.Subscription
 var nostrRelays []*nostr.Relay
 
+func containsOnlyLowercaseAndNumbers(s string) bool {
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'z') {
+			return false
+		}
+	}
+	return true
+}
+
 func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 	relay, err := nostr.RelayConnect(ctx, url)
 	if err != nil {
@@ -68,10 +77,19 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 		var allFollow []string
 
 		for _, f := range follows {
-			allFollow = append(allFollow, f.PubkeyHex)
+			if containsOnlyLowercaseAndNumbers(f.PubkeyHex) {
+				allFollow = append(allFollow, f.PubkeyHex)
+			}
 		}
 
-		allFollow = append(allFollow, followers...)
+		for _, f := range followers {
+			if containsOnlyLowercaseAndNumbers(f) {
+				allFollow = append(allFollow, f)
+			}
+		}
+
+		TheLog.Printf("initializing relay %s with %d authors\n", url, len(allFollow))
+
 		sinceDisco := rs.LastDisco
 		if sinceDisco.IsZero() {
 			sinceDisco = time.Now().Add(-168 * time.Hour)
@@ -86,7 +104,12 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 
 		filters = []nostr.Filter{
 			{
-				Kinds:   []int{0, 2, 3},
+				Kinds:   []int{0, 2},
+				Limit:   100,
+				Authors: []string{pubkey},
+			},
+			{
+				Kinds:   []int{3},
 				Limit:   100,
 				Authors: []string{pubkey},
 			},
