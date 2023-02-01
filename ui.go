@@ -870,6 +870,13 @@ func askExpand(g *gocui.Gui, v *gocui.View) error {
 		v2, _ := g.View("v2")
 		_, cy := v2.Cursor()
 		if followSearch {
+			// the follow target has no followers, and enter was pressed, so go back
+			if len(followPages) == 0 {
+				followSearch = false
+				refresh(g, v2)
+				refreshV3(g, v2)
+				return nil
+			}
 			followTarget = followPages[cy+CurrOffset]
 			CurrOffset = 0
 			ViewDB.Model(&followTarget).Offset(CurrOffset).Order("name desc").Association("Follows").Find(&followPages)
