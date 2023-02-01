@@ -17,6 +17,8 @@ Managing type 3 (contact lists) is the #1 priority.
 - [x] Private Key Management / Salted Password / Encrypted storage for private keys.
 - [x] Console UI
 - [x] Support Linux / Mac / Windows
+- [ ] Exporting/Saving of contact lists
+- [ ] Loading of saved contact lists
 - [ ] Tons of stuff
 
 ### installation
