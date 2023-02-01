@@ -72,9 +72,16 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 		}
 
 		allFollow = append(allFollow, followers...)
+		sinceDisco := rs.LastDisco
+		if sinceDisco.IsZero() {
+			sinceDisco = time.Now().Add(-168 * time.Hour)
+		}
 		since := rs.LastEOSE
 		if since.IsZero() {
 			since = time.Now().Add(-72 * time.Hour)
+		}
+		if sinceDisco.After(since) {
+			since = sinceDisco
 		}
 
 		filters = []nostr.Filter{
@@ -159,7 +166,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				}
 				m.UpdatedAt = ev.CreatedAt
 				if len(m.Picture) > 65535 {
-					TheLog.Println("too big a picture for profile, skipping" + ev.PubKey)
+					//TheLog.Println("too big a picture for profile, skipping" + ev.PubKey)
 					m.Picture = ""
 					//continue
 				}
@@ -174,7 +181,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 					TheLog.Printf("Created metadata for %s, %s\n", m.Name, m.Nip05)
 				} else {
 					if checkMeta.UpdatedAt.After(ev.CreatedAt) {
-						TheLog.Println("skipping old metadata for " + ev.PubKey)
+						//TheLog.Println("skipping old metadata for " + ev.PubKey)
 						continue
 					} else {
 						rowsUpdated := db.Model(Metadata{}).Where("pubkey_hex = ?", m.PubkeyHex).Updates(&m).RowsAffected
@@ -217,7 +224,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				var person Metadata
 				notFoundError := db.First(&person, "pubkey_hex = ?", ev.PubKey).Error
 				if notFoundError != nil {
-					TheLog.Printf("Creating blank metadata for %s\n", ev.PubKey)
+					//TheLog.Printf("Creating blank metadata for %s\n", ev.PubKey)
 					person = Metadata{
 						PubkeyHex:    ev.PubKey,
 						TotalFollows: len(allPTags),
@@ -229,12 +236,12 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				} else {
 					if person.ContactsUpdatedAt.After(ev.CreatedAt) {
 						// double check the timestamp for this follow list, don't update if older than most recent
-						TheLog.Printf("skipping old contact list for " + ev.PubKey)
+						//TheLog.Printf("skipping old contact list for " + ev.PubKey)
 						continue
 					} else {
 						db.Model(&person).Update("total_follows", len(allPTags))
 						db.Model(&person).Update("contacts_updated_at", ev.CreatedAt)
-						TheLog.Printf("updating (%d) follows for %s: %s\n", len(allPTags), person.Name, person.PubkeyHex)
+						//TheLog.Printf("updating (%d) follows for %s: %s\n", len(allPTags), person.Name, person.PubkeyHex)
 					}
 				}
 

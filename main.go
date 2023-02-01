@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/awesome-gocui/gocui"
@@ -48,6 +49,7 @@ type RelayStatus struct {
 	Status    string    `gorm:"size:512"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 	LastEOSE  time.Time
+	LastDisco time.Time
 }
 
 type Account struct {
@@ -65,9 +67,24 @@ func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
 	var r RelayStatus
 	if status == "EOSE" {
 		r = RelayStatus{Url: url, Status: status, LastEOSE: time.Now()}
+	} else if strings.HasPrefix(status, "connection error") {
+		// relay received an error, check the time of last error,
+		// if the last error was received before an EOSE, update the disco time, otherwise don't.
+		var lastRelayStatus RelayStatus
+		errLast := db.Where("url = ?", url).First(&lastRelayStatus)
+		if errLast == nil {
+			if lastRelayStatus.LastEOSE.After(lastRelayStatus.LastDisco) {
+				r = RelayStatus{Url: url, Status: status, LastDisco: time.Now()}
+			} else {
+				r = RelayStatus{Url: url, Status: status}
+			}
+		}
+	} else if status == "disconnected" {
+		r = RelayStatus{Url: url, Status: status}
 	} else {
 		r = RelayStatus{Url: url, Status: status}
 	}
+
 	rowsUpdated := db.Model(RelayStatus{}).Where("url = ?", url).Updates(&r).RowsAffected
 	if rowsUpdated == 0 {
 		db.Create(&r)

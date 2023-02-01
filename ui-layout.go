@@ -68,7 +68,7 @@ func layout(g *gocui.Gui) error {
 		v.BgColor = useBg
 		v.FgColor = useFg
 		v.FrameColor = useFrame
-		v.Editable = false
+		v.Editable = true
 		refreshV3(g, v)
 	}
 

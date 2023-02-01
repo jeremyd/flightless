@@ -877,7 +877,7 @@ func askExpand(g *gocui.Gui, v *gocui.View) error {
 			}
 			followTarget = followPages[cy+CurrOffset]
 			CurrOffset = 0
-			ViewDB.Model(&followTarget).Offset(CurrOffset).Order("name desc").Association("Follows").Find(&followPages)
+			ViewDB.Model(&followTarget).Offset(CurrOffset).Order("updated_at desc").Association("Follows").Find(&followPages)
 			if len(followPages) > 0 {
 				TheLog.Println("current follows", len(followPages))
 				v2.Title = fmt.Sprintf("%s/follows", followTarget.Name)
@@ -890,7 +890,7 @@ func askExpand(g *gocui.Gui, v *gocui.View) error {
 			// reload view v2 with v2Meta loaded with follows to start
 			CurrOffset = 0
 			followTarget = v2Meta[cy]
-			ViewDB.Model(followTarget).Offset(CurrOffset).Order("name desc").Association("Follows").Find(&followPages)
+			ViewDB.Model(followTarget).Offset(CurrOffset).Order("updated_at desc").Association("Follows").Find(&followPages)
 			TheLog.Println("current follows", len(followPages))
 			followSearch = true
 			refresh(g, v2)

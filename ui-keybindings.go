@@ -98,21 +98,23 @@ func keybindings(g *gocui.Gui) error {
 
 	/* v3 view (expanded metadata) */
 	// cursor
-	if err := g.SetKeybinding("v3", gocui.KeyArrowDown, gocui.ModNone, cursorDownV3); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("v3", gocui.KeyArrowUp, gocui.ModNone, cursorUpV3); err != nil {
-		log.Panicln(err)
-	}
-	// vim cursor
-	// j key (down)
-	if err := g.SetKeybinding("v3", rune(0x6a), gocui.ModNone, cursorDownV3); err != nil {
-		log.Panicln(err)
-	}
-	// k key (up)
-	if err := g.SetKeybinding("v3", rune(0x6b), gocui.ModNone, cursorUpV3); err != nil {
-		log.Panicln(err)
-	}
+	/*
+		if err := g.SetKeybinding("v3", gocui.KeyArrowDown, gocui.ModNone, cursorDownV3); err != nil {
+			log.Panicln(err)
+		}
+		if err := g.SetKeybinding("v3", gocui.KeyArrowUp, gocui.ModNone, cursorUpV3); err != nil {
+			log.Panicln(err)
+		}
+		// vim cursor
+		// j key (down)
+		if err := g.SetKeybinding("v3", rune(0x6a), gocui.ModNone, cursorDownV3); err != nil {
+			log.Panicln(err)
+		}
+		// k key (up)
+		if err := g.SetKeybinding("v3", rune(0x6b), gocui.ModNone, cursorUpV3); err != nil {
+			log.Panicln(err)
+		}
+	*/
 
 	/* search view */
 	if err := g.SetKeybinding("msg", gocui.KeyEnter, gocui.ModNone, doSearch); err != nil {

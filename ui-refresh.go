@@ -39,10 +39,10 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 		if searchTerm != "" && searchTerm != "%%" {
 
 			ViewDB.Model(&Metadata{}).Where("name like ? or nip05 like ? or pubkey_hex like ? or pubkey_npub like ?", searchTerm, searchTerm, searchTerm, searchTerm).Count(&resultCount)
-			ViewDB.Offset(CurrOffset).Limit(vY-1).Order("name asc").Find(&v2Meta, "name like ? or nip05 like ? or pubkey_hex like ? or pubkey_npub like ?", searchTerm, searchTerm, searchTerm, searchTerm)
+			ViewDB.Offset(CurrOffset).Limit(vY-1).Order("updated_at desc").Find(&v2Meta, "name like ? or nip05 like ? or pubkey_hex like ? or pubkey_npub like ?", searchTerm, searchTerm, searchTerm, searchTerm)
 		} else {
 			ViewDB.Model(&Metadata{}).Where("name != ?", "").Count(&resultCount)
-			ViewDB.Offset(CurrOffset).Limit(vY-1).Order("name asc").Find(&v2Meta, "name != ?", "")
+			ViewDB.Offset(CurrOffset).Limit(vY-1).Order("updated_at desc").Find(&v2Meta, "name != ?", "")
 		}
 		for _, metadata := range v2Meta {
 			if metadata.Nip05 != "" {
