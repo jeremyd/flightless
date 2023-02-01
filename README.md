@@ -11,13 +11,13 @@ Console application for managing your contact lists and profiles for[*nostr* pro
 
 Managing type 3 (contact lists) is the #1 priority.  
 
- [x] Caching of metadata type 0 (profiles) for searching and following in an open SQLITE3 format.
- [x] Relay Management
- [x] Follow Management
- [x] Private Key Management / Salted Password / Encrypted storage for private keys.
- [x] Console UI
- [x] Support Linux / Mac / Windows
- [-] Tons of stuff
+- [x] Caching of metadata type 0 (profiles) for searching and following in an open SQLITE3 format.
+- [x] Relay Management
+- [x] Follow Management
+- [x] Private Key Management / Salted Password / Encrypted storage for private keys.
+- [x] Console UI
+- [x] Support Linux / Mac / Windows
+- [ ] Tons of stuff
 
 ### installation
 
