@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"syscall"
 	"time"
 
@@ -71,15 +72,21 @@ func doSearch(g *gocui.Gui, v *gocui.View) error {
 	searchTerm = "%" + msg.Buffer() + "%"
 	g.DeleteView("msg")
 	g.SetCurrentView("v2")
-	v2, _ := g.View("v2")
-	v2.Title = "Search: " + msg.Buffer()
 	refresh(g, v)
 	refreshV3(g, v)
 	return nil
 }
 
 func quit(g *gocui.Gui, v *gocui.View) error {
-	syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+	p, err := os.FindProcess(os.Getpid())
+
+	if err != nil {
+		return err
+	}
+
+	p.Signal(syscall.SIGTERM)
+
+	//syscall.Signal(syscall.Getpid(), syscall.SIGTERM)
 	// give the relays time to close their connections
 	// kick off a UI update while they do this
 	go func() {
@@ -267,6 +274,23 @@ func cursorUpV4(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func displayMyMetadataShort() string {
+	var account Account
+	var m Metadata
+	e1 := ViewDB.First(&account, "active = ?", true).Error
+	e2 := ViewDB.First(&m, "pubkey_hex = ?", account.Pubkey).Error
+	if e1 != nil || e2 != nil {
+		TheLog.Println("displayMyMetadataShort() error", e1, e2)
+		return " | unknown - " + account.PubkeyNpub
+	}
+	var followersCount int64
+	var followsCount int64
+	ViewDB.Table("metadata_follows").Where("follow_pubkey_hex = ?", m.PubkeyHex).Count(&followersCount)
+	ViewDB.Table("metadata_follows").Where("metadata_pubkey_hex = ?", m.PubkeyHex).Count(&followsCount)
+	x := fmt.Sprintf(" | %s (Followers: %4d, Follows: %4d)", m.Name, followersCount, followsCount)
+	return x
+}
+
 func displayMetadataAsText(m Metadata) string {
 	// Use GORM API build SQL
 	var followersCount int64
@@ -316,7 +340,7 @@ func addRelay(g *gocui.Gui, v *gocui.View) error {
 		v.KeybindOnEdit = true
 		v2, _ := g.View("v2")
 		_, cy := v2.Cursor()
-		if prevViewName == "v2" {
+		if prevViewName == "v2" && len(v2Meta) > 0 {
 			curM := v2Meta[cy]
 			var curServer RecommendServer
 			ViewDB.Model(&curM).Association("Servers").Find(&curServer, "recommended_by = ?", curM.PubkeyHex)
@@ -392,17 +416,23 @@ func config(g *gocui.Gui, v *gocui.View) error {
 
 		theKey := ""
 		for _, acct := range accounts {
+			var m Metadata
+			ViewDB.First(&m, "pubkey_hex = ?", acct.Pubkey)
 			theKey = Decrypt(string(Password), acct.Privatekey)
 			if len(theKey) != 64 {
 				fmt.Fprintf(v, "invalid key.. delete please: %s", theKey)
 			} else {
-				fmt.Fprintf(v, "[%s ... ] for %s\n", theKey[0:5], acct.PubkeyNpub)
+				activeNotice := ""
+				if acct.Active {
+					activeNotice = "*"
+				}
+				fmt.Fprintf(v, "%s[%s ... ] for %s %s\n", activeNotice, theKey[0:5], m.Name, acct.PubkeyNpub)
 				// full priv key printing
 				//fmt.Fprintf(v, "[%s] for %s\n", theKey, acct.Pubkey)
 			}
 		}
 
-		v.Title = "Config Private Keys - [Enter]Use key - [ESC]Cancel - [n]ew key - [d]elete key -"
+		v.Title = "Config Private Keys - [Enter]Use key - [ESC]Cancel - [n]ew key - [d]elete key - [g]enerate key"
 		v.Highlight = true
 		v.SelBgColor = gocui.ColorGreen
 		v.SelFgColor = gocui.ColorBlack
@@ -466,6 +496,61 @@ func activateConfig(
 	return nil
 }
 
+func generateConfig(g *gocui.Gui, v *gocui.View) error {
+	if v != nil {
+		sk := nostr.GeneratePrivateKey()
+		encKey := Encrypt(string(Password), sk)
+		pk, ep := nostr.GetPublicKey(sk)
+		npub, ep2 := nip19.EncodePublicKey(pk)
+		if ep != nil || ep2 != nil {
+			TheLog.Printf("error getting public key: %s", ep)
+		}
+		account := Account{Privatekey: encKey, Pubkey: pk, PubkeyNpub: npub, Active: true}
+		e2 := ViewDB.Save(&account).Error
+		if e2 != nil {
+			TheLog.Printf("error saving private key: %s", e2)
+		}
+
+		g.SetCurrentView("v2")
+		g.DeleteView("config")
+		refreshV5(g, v)
+	}
+	return nil
+}
+
+func configShowPrivateKey(
+	g *gocui.Gui,
+	v *gocui.View,
+) error {
+	maxX, maxY := g.Size()
+	cView, _ := g.View("config")
+	_, cy := cView.Cursor()
+	accounts := []Account{}
+	aerr := ViewDB.Find(&accounts).Error
+	if aerr != nil {
+		TheLog.Printf("error getting accounts: %s", aerr)
+	}
+	sk := Decrypt(string(Password), accounts[cy].Privatekey)
+	g.DeleteView("config")
+	if v, err := g.SetView("configshow", maxX/2-50, maxY/2-1, maxX/2+50, maxY/2+1, 0); err != nil {
+		if !errors.Is(err, gocui.ErrUnknownView) {
+			return err
+		}
+
+		fmt.Fprintf(v, "%s", sk)
+		v.Title = "*** Showing Private Key ***  [ESC]Dismiss"
+		v.Highlight = true
+		v.SelBgColor = gocui.ColorGreen
+		v.SelFgColor = gocui.ColorBlack
+		v.Editable = false
+		v.KeybindOnEdit = true
+		if _, err := g.SetCurrentView("configshow"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func doConfigNew(g *gocui.Gui, v *gocui.View) error {
 	if v != nil {
 		line := v.Buffer()
@@ -483,7 +568,7 @@ func doConfigNew(g *gocui.Gui, v *gocui.View) error {
 		if ep != nil || ep2 != nil {
 			TheLog.Printf("error getting public key: %s", ep)
 		}
-		account := Account{Privatekey: encKey, Pubkey: pk, PubkeyNpub: npub}
+		account := Account{Privatekey: encKey, Pubkey: pk, PubkeyNpub: npub, Active: true}
 		e2 := ViewDB.Save(&account).Error
 		if e2 != nil {
 			TheLog.Printf("error saving private key: %s", e2)
@@ -521,6 +606,22 @@ func doConfigDel(g *gocui.Gui, v *gocui.View) error {
 		if e2 != nil {
 			TheLog.Printf("error deleting private key: %s", e2)
 		}
+
+		// activate a different account if there are any
+		ViewDB.Find(&accounts)
+		anyActive := false
+		anyAccounts := (len(accounts) > 0)
+		for _, a := range accounts {
+			if a.Active {
+				anyActive = true
+			}
+		}
+		if !anyActive && anyAccounts {
+			accounts[0].Active = true
+			ViewDB.Save(&accounts[0])
+		}
+
+		refreshV5(g, v)
 
 		g.DeleteView("config")
 	}
@@ -566,6 +667,12 @@ func cursorUpConfig(g *gocui.Gui, v *gocui.View) error {
 
 func cancelConfigNew(g *gocui.Gui, v *gocui.View) error {
 	g.DeleteView("confignew")
+	g.SetCurrentView("v2")
+	return nil
+}
+
+func cancelConfigShow(g *gocui.Gui, v *gocui.View) error {
+	g.DeleteView("configshow")
 	g.SetCurrentView("v2")
 	return nil
 }
@@ -763,9 +870,9 @@ func askExpand(g *gocui.Gui, v *gocui.View) error {
 		v2, _ := g.View("v2")
 		_, cy := v2.Cursor()
 		if followSearch {
-			followTarget := followPages[cy+CurrOffset]
+			followTarget = followPages[cy+CurrOffset]
 			CurrOffset = 0
-			ViewDB.Model(&followTarget).Offset(CurrOffset).Association("Follows").Find(&followPages)
+			ViewDB.Model(&followTarget).Offset(CurrOffset).Order("name desc").Association("Follows").Find(&followPages)
 			if len(followPages) > 0 {
 				TheLog.Println("current follows", len(followPages))
 				v2.Title = fmt.Sprintf("%s/follows", followTarget.Name)
@@ -777,10 +884,9 @@ func askExpand(g *gocui.Gui, v *gocui.View) error {
 		} else {
 			// reload view v2 with v2Meta loaded with follows to start
 			CurrOffset = 0
-			target := v2Meta[cy]
-			ViewDB.Model(&target).Offset(CurrOffset).Association("Follows").Find(&followPages)
+			followTarget = v2Meta[cy]
+			ViewDB.Model(followTarget).Offset(CurrOffset).Order("name desc").Association("Follows").Find(&followPages)
 			TheLog.Println("current follows", len(followPages))
-			v2.Title = fmt.Sprintf("%s/follows", target.Name)
 			followSearch = true
 			refresh(g, v2)
 			refreshV3(g, v2)

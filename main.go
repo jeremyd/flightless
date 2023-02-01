@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/awesome-gocui/gocui"
-	"gorm.io/driver/sqlite"
+	//"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-var AppInfo = "FlexTree Pro Gold v0.0.1"
+var AppInfo = "flightless v0.0.1"
 
 type Metadata struct {
 	PubkeyHex         string `gorm:"primaryKey;size:65"`
@@ -46,6 +47,7 @@ type RelayStatus struct {
 	Url       string    `gorm:"primaryKey;size:512"`
 	Status    string    `gorm:"size:512"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime"`
+	LastEOSE  time.Time
 }
 
 type Account struct {
@@ -60,16 +62,22 @@ type Login struct {
 }
 
 func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
-	rowsUpdated := db.Model(RelayStatus{}).Where("url = ?", url).Updates(&RelayStatus{Url: url, Status: status}).RowsAffected
+	var r RelayStatus
+	if status == "EOSE" {
+		r = RelayStatus{Url: url, Status: status, LastEOSE: time.Now()}
+	} else {
+		r = RelayStatus{Url: url, Status: status}
+	}
+	rowsUpdated := db.Model(RelayStatus{}).Where("url = ?", url).Updates(&r).RowsAffected
 	if rowsUpdated == 0 {
-		db.Create(&RelayStatus{Url: url, Status: status})
+		db.Create(&r)
 	}
 }
 
 var TheLog *log.Logger
 
 func GetGormConnection() *gorm.DB {
-	file, err := os.OpenFile("flextree-pro-gold.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	file, err := os.OpenFile("flightless.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		// Handle error
 		panic(err)
@@ -88,7 +96,7 @@ func GetGormConnection() *gorm.DB {
 
 	dsn, foundDsn := os.LookupEnv("DB")
 	if !foundDsn {
-		dsn = "flextree-pro-gold.db?cache=shared&mode=rwc"
+		dsn = "flightless.db?cache=shared&mode=rwc"
 	}
 
 	db, dberr := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: newLogger})
@@ -207,7 +215,6 @@ func main() {
 			var RelayStatuses []RelayStatus
 			DB.Find(&RelayStatuses)
 			for _, relayStatus := range RelayStatuses {
-
 				if relayStatus.Status == "waiting" {
 					doRelay(DB, CTX, relayStatus.Url)
 				} else if relayStatus.Status == "deleting" {

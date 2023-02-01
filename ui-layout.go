@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/awesome-gocui/gocui"
 	tcell "github.com/gdamore/tcell/v2"
@@ -24,6 +25,20 @@ func layout(g *gocui.Gui) error {
 		v.BgColor = useBg
 		v.FgColor = useFg
 		fmt.Fprint(v, AppInfo)
+		go func() {
+			for {
+				time.Sleep(1 * time.Second)
+
+				g.Update(func(g *gocui.Gui) error {
+					showMe := displayMyMetadataShort()
+					v, _ := g.View("v1")
+					v.Clear()
+					padding := "%s %s"
+					fmt.Fprintf(v, padding, AppInfo, showMe)
+					return nil
+				})
+			}
+		}()
 
 	}
 

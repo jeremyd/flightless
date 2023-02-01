@@ -136,6 +136,10 @@ func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("config", gocui.KeyEnter, gocui.ModNone, activateConfig); err != nil {
 		log.Panicln(err)
 	}
+	// g key generate key
+	if err := g.SetKeybinding("config", rune(0x67), gocui.ModNone, generateConfig); err != nil {
+		log.Panicln(err)
+	}
 	// unsupported: edit
 	//if err := g.SetKeybinding("config", gocui.KeyEnter, gocui.ModNone, configEdit); err != nil {
 	//	log.Panicln(err)
@@ -154,6 +158,10 @@ func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("config", gocui.KeyArrowUp, gocui.ModNone, cursorUpConfig); err != nil {
 		log.Panicln(err)
 	}
+	// p key (show private key)
+	if err := g.SetKeybinding("config", rune(0x70), gocui.ModNone, configShowPrivateKey); err != nil {
+		log.Panicln(err)
+	}
 	/* config submenu (new/edit) */
 	//cancel key
 	if err := g.SetKeybinding("confignew", gocui.KeyEsc, gocui.ModNone, cancelConfigNew); err != nil {
@@ -161,6 +169,11 @@ func keybindings(g *gocui.Gui) error {
 	}
 
 	if err := g.SetKeybinding("confignew", gocui.KeyEnter, gocui.ModNone, doConfigNew); err != nil {
+		log.Panicln(err)
+	}
+
+	//cancel key
+	if err := g.SetKeybinding("configshow", gocui.KeyEsc, gocui.ModNone, cancelConfigShow); err != nil {
 		log.Panicln(err)
 	}
 

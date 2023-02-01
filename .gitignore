@@ -1,7 +1,10 @@
-flextree-pro-gold
+flightless
 .env
 .env*
 mysql.env
 *.swp
 *.db*
 *.log*
+dist/
+
+dist/

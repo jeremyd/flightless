@@ -11,11 +11,10 @@ import (
 	"log"
 	"os"
 	"strings"
-	"syscall"
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/pbkdf2"
-	"golang.org/x/term"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 func Encrypt(passphrase, plaintext string) string {
@@ -56,11 +55,13 @@ func GetNewPwd() []byte {
 	// Prompt the user to enter a password
 	fmt.Println("Enter password")
 	// We will use this to store the users input
-
 	// Read the users input
-	pwd1, err := term.ReadPassword(syscall.Stdin)
+	//pwd1, err := term.ReadPassword(syscall.Stdin)
+	pwd1, err := terminal.ReadPassword(int(os.Stdin.Fd()))
+
 	fmt.Println("Confirm password")
-	pwd2, err2 := term.ReadPassword(syscall.Stdin)
+	pwd2, err2 := terminal.ReadPassword(int(os.Stdin.Fd()))
+	//pwd2, err2 := term.ReadPassword(syscall.Stdin)
 	if err != nil || err2 != nil {
 		log.Println(err)
 	}
@@ -81,7 +82,8 @@ func GetPwd() []byte {
 	// We will use this to store the users input
 
 	// Read the users input
-	pwd1, err := term.ReadPassword(syscall.Stdin)
+	//	pwd1, err := term.ReadPassword(syscall.Stdin)
+	pwd1, err := terminal.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
 		log.Println(err)
 	}

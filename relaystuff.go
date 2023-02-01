@@ -49,6 +49,15 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 			}
 		}
 
+		var rs RelayStatus
+		//foundSince := false
+		db.First(&rs, "url = ?", url)
+		//if statusNotFound != nil {
+		//	foundSince = false
+		//} else {
+		//	foundSince = true
+		//}
+
 		var followers []string
 		db.Table("metadata_follows").Select("metadata_pubkey_hex").Where("follow_pubkey_hex = ?", pubkey).Scan(&followers)
 
@@ -63,6 +72,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 		}
 
 		allFollow = append(allFollow, followers...)
+		since := rs.LastEOSE
 
 		filters = []nostr.Filter{
 			{
@@ -72,21 +82,27 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 			},
 			{
 				Kinds: []int{0, 2},
-				Limit: 100,
+				Limit: 10000,
+				Since: &since,
 			},
 			{
 				Kinds: []int{3},
-				Limit: 100,
+				Limit: 1000,
+				Since: &since,
 			},
 			{
-				Kinds:   []int{0, 2},
-				Limit:   len(allFollow),
+				Kinds: []int{0, 2},
+				//Limit:   len(allFollow),
+				Limit:   1000,
 				Authors: allFollow,
+				Since:   &since,
 			},
 			{
-				Kinds:   []int{3},
-				Limit:   len(allFollow),
+				Kinds: []int{3},
+				Limit: 1000,
+				//Limit:   len(allFollow),
 				Authors: allFollow,
+				Since:   &since,
 			},
 			/*
 				{

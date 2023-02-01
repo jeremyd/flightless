@@ -24,7 +24,9 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 	v2, _ := g.View("v2")
 	_, vY := v2.Size()
 	v2.Clear()
+	var resultCount int64
 	if followSearch {
+		resultCount = int64(len(followPages))
 		for _, metadata := range followPages[CurrOffset:] {
 			if metadata.Nip05 != "" {
 				fmt.Fprintf(v2, "%-30s %-30s \n", metadata.Name, metadata.Nip05)
@@ -32,11 +34,15 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 				fmt.Fprintf(v2, "%-30s\n", metadata.Name)
 			}
 		}
+		v2.Title = fmt.Sprintf("%s/follows (%d)", followTarget.Name, resultCount)
 	} else {
 		if searchTerm != "" && searchTerm != "%%" {
-			ViewDB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name like ? or nip05 like ? or pubkey_hex like ? or pubkey_npub like ?", searchTerm, searchTerm, searchTerm, searchTerm)
+
+			ViewDB.Model(&Metadata{}).Where("name like ? or nip05 like ? or pubkey_hex like ? or pubkey_npub like ?", searchTerm, searchTerm, searchTerm, searchTerm).Count(&resultCount)
+			ViewDB.Offset(CurrOffset).Limit(vY-1).Order("name asc").Find(&v2Meta, "name like ? or nip05 like ? or pubkey_hex like ? or pubkey_npub like ?", searchTerm, searchTerm, searchTerm, searchTerm)
 		} else {
-			ViewDB.Offset(CurrOffset).Limit(vY-1).Find(&v2Meta, "name != ?", "")
+			ViewDB.Model(&Metadata{}).Where("name != ?", "").Count(&resultCount)
+			ViewDB.Offset(CurrOffset).Limit(vY-1).Order("name asc").Find(&v2Meta, "name != ?", "")
 		}
 		for _, metadata := range v2Meta {
 			if metadata.Nip05 != "" {
@@ -45,6 +51,7 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 				fmt.Fprintf(v2, "%-30s\n", metadata.Name)
 			}
 		}
+		v2.Title = fmt.Sprintf("search: %s (%d results)", searchTerm, resultCount)
 	}
 	v2.Highlight = true
 	v2.SelBgColor = gocui.ColorCyan
@@ -118,7 +125,7 @@ func refreshV5(g *gocui.Gui, v *gocui.View) error {
 		if em == nil && mm.Name != "" {
 			usename = mm.Name
 		}
-		fmt.Fprintf(v5, "account: %s, %s\n", usename, ac.Pubkey)
+		fmt.Fprintf(v5, "account: %s, %s\n", usename, ac.PubkeyNpub)
 	} else {
 		fmt.Fprintf(v5, "no account active\n")
 	}
