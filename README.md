@@ -1,6 +1,6 @@
 
 
-https://user-images.githubusercontent.com/4072/216032839-78a8f8c0-4663-437a-9212-3bde7e74fe51.mp4
+
 
 flightless
 ====
@@ -16,7 +16,7 @@ soon
 soon
 
 ### intro: a look at managing contact lists for multiple accounts
-screencast soon
+https://user-images.githubusercontent.com/4072/216032839-78a8f8c0-4663-437a-9212-3bde7e74fe51.mp4
 
 ### intro: bootstrapping your database and relays
 screencast soon
