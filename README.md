@@ -9,8 +9,9 @@ Console application for managing your contact lists and profiles for[*nostr* pro
 
 ### installation
 
-### [download a release] from github (https://github.com/jeremyd/flightless/releases)
-soon
+### [download a release](https://github.com/jeremyd/flightless/releases) from github.
+unpack and run.
+log and database will be in the current directory, see flightless.log
 
 ### install from source
 soon
