@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-var AppInfo = "flightless v0.0.1"
+var AppInfo = "flightless v0.0.2"
 
 type Metadata struct {
 	PubkeyHex         string `gorm:"primaryKey;size:65"`
@@ -79,12 +79,9 @@ func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
 				r = RelayStatus{Url: url, Status: status}
 			}
 		}
-	} else if status == "disconnected" {
-		r = RelayStatus{Url: url, Status: status}
 	} else {
 		r = RelayStatus{Url: url, Status: status}
 	}
-
 	rowsUpdated := db.Model(RelayStatus{}).Where("url = ?", url).Updates(&r).RowsAffected
 	if rowsUpdated == 0 {
 		db.Create(&r)
