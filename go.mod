@@ -39,4 +39,5 @@ require (
 	modernc.org/sqlite v1.20.0 // indirect
 )
 
-replace github.com/nbd-wtf/go-nostr => ../go-nostr
+// dev
+//replace github.com/nbd-wtf/go-nostr => ../go-nostr
