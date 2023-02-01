@@ -73,6 +73,9 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 
 		allFollow = append(allFollow, followers...)
 		since := rs.LastEOSE
+		if since.IsZero() {
+			since = time.Now().Add(-72 * time.Hour)
+		}
 
 		filters = []nostr.Filter{
 			{
@@ -87,39 +90,24 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 			},
 			{
 				Kinds: []int{3},
-				Limit: 1000,
+				Limit: 10000,
 				Since: &since,
 			},
 			{
 				Kinds: []int{0, 2},
 				//Limit:   len(allFollow),
-				Limit:   1000,
+				Limit:   10000,
 				Authors: allFollow,
 				Since:   &since,
 			},
 			{
 				Kinds: []int{3},
-				Limit: 1000,
+				//Limit: 1000,
 				//Limit:   len(allFollow),
+				Limit:   10000,
 				Authors: allFollow,
 				Since:   &since,
 			},
-			/*
-				{
-					Kinds:   []int{2},
-					Limit:   100,
-					Authors: allFollow,
-				},
-				{
-					Kinds:   []int{3},
-					Limit:   100,
-					Authors: allFollow,
-				},
-				{
-					Kinds: []int{0, 2, 3},
-					Limit: 100,
-				},
-			*/
 		}
 	} else {
 		filters = []nostr.Filter{

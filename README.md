@@ -16,3 +16,6 @@ screencast soon
 
 ### intro: bootstrapping your database and relays
 screencast soon
+
+### nostr channel
+soon

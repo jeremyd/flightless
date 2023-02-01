@@ -327,7 +327,7 @@ func displayMetadataAsText(m Metadata) string {
 
 func addRelay(g *gocui.Gui, v *gocui.View) error {
 	maxX, maxY := g.Size()
-	prevViewName := v.Name()
+	//prevViewName := v.Name()
 	if v, err := g.SetView("addrelay", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
@@ -338,21 +338,19 @@ func addRelay(g *gocui.Gui, v *gocui.View) error {
 		v.Title = "Add Relay? [enter] to save / [ESC] to cancel"
 		v.Editable = true
 		v.KeybindOnEdit = true
-		v2, _ := g.View("v2")
-		_, cy := v2.Cursor()
-		if prevViewName == "v2" && len(v2Meta) > 0 {
-			curM := v2Meta[cy]
-			var curServer RecommendServer
-			ViewDB.Model(&curM).Association("Servers").Find(&curServer, "recommended_by = ?", curM.PubkeyHex)
-			if curServer.Url == "" {
-				/*
-					g.SetCurrentView("v2")
-					g.DeleteView("addrelay")
-				*/
-			} else {
-				fmt.Fprintf(v, "%s", curServer.Url)
+		/*
+			v2, _ := g.View("v2")
+			_, cy := v2.Cursor()
+			if prevViewName == "v2" && len(v2Meta) > 0 {
+				curM := v2Meta[cy]
+				var curServer RecommendServer
+				ViewDB.Model(&curM).Association("Servers").Find(&curServer, "recommended_by = ?", curM.PubkeyHex)
+				if curServer.Url == "" {
+				} else {
+					fmt.Fprintf(v, "%s", curServer.Url)
+				}
 			}
-		}
+		*/
 	}
 	return nil
 }
