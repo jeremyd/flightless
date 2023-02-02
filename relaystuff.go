@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/signal"
@@ -16,11 +17,12 @@ import (
 var nostrSubs []*nostr.Subscription
 var nostrRelays []*nostr.Relay
 
-func containsOnlyLowercaseAndNumbers(s string) bool {
-	for _, c := range s {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'z') {
-			return false
-		}
+func isHex(s string) bool {
+	dst := make([]byte, hex.DecodedLen(len(s)))
+
+	if _, err := hex.Decode(dst, []byte(s)); err != nil {
+		return false
+		// s is not a valid
 	}
 	return true
 }
@@ -77,13 +79,13 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 		var allFollow []string
 
 		for _, f := range follows {
-			if containsOnlyLowercaseAndNumbers(f.PubkeyHex) {
+			if isHex(f.PubkeyHex) {
 				allFollow = append(allFollow, f.PubkeyHex)
 			}
 		}
 
 		for _, f := range followers {
-			if containsOnlyLowercaseAndNumbers(f) {
+			if isHex(f) {
 				allFollow = append(allFollow, f)
 			}
 		}
