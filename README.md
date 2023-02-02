@@ -31,7 +31,11 @@ log and database will be in the current directory, see flightless.log
 soon
 
 ### intro: a look at managing contact lists for multiple accounts
-https://user-images.githubusercontent.com/4072/216034894-466fa37d-e2f8-4125-86fa-960c4ad841f1.mp4
+
+
+https://user-images.githubusercontent.com/4072/216230369-7ee6057e-f945-476e-b3d5-dad865b1294a.mp4
+
+
 
 
 ### intro: bootstrapping your database and relays
