@@ -64,6 +64,8 @@ func search(g *gocui.Gui, v *gocui.View) error {
 
 func doSearch(g *gocui.Gui, v *gocui.View) error {
 	followSearch = false
+	// zero out the highlighted list
+	highlighted = []string{}
 	CurrOffset = 0
 	msg, eM := g.View("msg")
 	if eM != nil {
@@ -710,6 +712,15 @@ func follow(g *gocui.Gui, v *gocui.View) error {
 	var numFollows int64
 	ViewDB.Table("metadata_follows").Where("metadata_pubkey_hex = ?", account.Pubkey).Count(&numFollows)
 
+	var curFollows []Metadata
+	assocError := ViewDB.Model(&m).Association("Follows").Find(&curFollows)
+	if assocError != nil {
+		TheLog.Printf("error getting follows for account: %s", assocError)
+	}
+
+	// check if we already follow this person
+	highlightedMinusCurFollowsUniq := sanitizeHighlighted(highlighted)
+
 	//lenWindow := len(highlighted) + 2
 	if v, err := g.SetView("follow", maxX/2-50, maxY/2-5, maxX/2+50, maxY/2+2, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
@@ -723,8 +734,8 @@ func follow(g *gocui.Gui, v *gocui.View) error {
 		v.KeybindOnEdit = true
 		fmt.Fprintf(v, "you have %d existing follows in our known data, check safu?\n\n", numFollows)
 		fmt.Fprintf(v, "follow %s %s %s?\n", m.Name, m.Nip05, m.PubkeyHex)
-		if len(highlighted) > 0 {
-			fmt.Fprintf(v, "+bulk follow: selected additional %d highlighted follows\n", len(highlighted))
+		if len(highlightedMinusCurFollowsUniq) > 0 {
+			fmt.Fprintf(v, "+bulk follow: selected additional %d highlighted follows\n", len(highlightedMinusCurFollowsUniq))
 			/*
 				for _, hi := range highlighted {
 					fmt.Fprintf(v, "%s\n", hi)
@@ -737,6 +748,52 @@ func follow(g *gocui.Gui, v *gocui.View) error {
 	}
 	return nil
 
+}
+
+func sanitizeHighlighted(h []string) []string {
+	// uniqueify
+	u := make([]string, 0, len(h))
+	seen := make(map[string]bool)
+	for _, v := range h {
+		if _, ok := seen[v]; !ok {
+			seen[v] = true
+			u = append(u, v)
+		}
+	}
+
+	account := Account{}
+	aerr := ViewDB.First(&account, "active = ?", true).Error
+	if aerr != nil {
+		TheLog.Printf("error getting active account: %s", aerr)
+		return nil
+	}
+	// get list of current follows
+	var me Metadata
+	err := ViewDB.First(&me, "pubkey_hex = ?", account.Pubkey).Error
+	if err != nil {
+		TheLog.Printf("error getting metadata for account pubkey: %s", err)
+	}
+
+	var curFollows []Metadata
+	assocError := ViewDB.Model(&me).Association("Follows").Find(&curFollows)
+	if assocError != nil {
+		TheLog.Printf("error getting follows for account: %s", assocError)
+	}
+
+	var x []string
+	for _, hi := range u {
+		found := false
+		for _, f := range curFollows {
+			if hi == f.PubkeyHex {
+				found = true
+			}
+		}
+		if !found && isHex(hi) {
+			x = append(x, hi)
+
+		}
+	}
+	return x
 }
 
 func doFollow(g *gocui.Gui, v *gocui.View) error {
@@ -763,12 +820,12 @@ func doFollow(g *gocui.Gui, v *gocui.View) error {
 	if err != nil {
 		TheLog.Printf("error getting metadata for account pubkey: %s", err)
 	}
-	TheLog.Printf("%v", me)
 	var curFollows []Metadata
 	assocError := ViewDB.Model(&me).Association("Follows").Find(&curFollows)
 	if assocError != nil {
 		TheLog.Printf("error getting follows for account: %s", assocError)
 	}
+
 	var tags nostr.Tags
 	// todo: set the relay nicely!
 	for _, follow := range curFollows {
@@ -779,7 +836,8 @@ func doFollow(g *gocui.Gui, v *gocui.View) error {
 	newtag := nostr.Tag{"p", m.PubkeyHex}
 	tags = append(tags, newtag)
 
-	for _, hi := range highlighted {
+	s := sanitizeHighlighted(highlighted)
+	for _, hi := range s {
 		newtag := nostr.Tag{"p", hi}
 		tags = append(tags, newtag)
 	}
@@ -855,6 +913,24 @@ func selectBar(g *gocui.Gui, v *gocui.View) error {
 			if !foundHighlight {
 				v.SetHighlight(cy, true)
 				highlighted = append(highlighted, v2Meta[cy].PubkeyHex)
+			}
+		}
+	}
+	return nil
+}
+
+// highlight the full page of followPages
+func selectAll(g *gocui.Gui, v *gocui.View) error {
+	if v != nil {
+		if followSearch {
+			for i := 0; i < len(followPages); i++ {
+				v.SetHighlight(i, true)
+				highlighted = append(highlighted, followPages[i].PubkeyHex)
+			}
+		} else {
+			for i := 0; i < len(v2Meta); i++ {
+				v.SetHighlight(i, true)
+				highlighted = append(highlighted, v2Meta[i].PubkeyHex)
 			}
 		}
 	}

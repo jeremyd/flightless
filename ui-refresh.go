@@ -50,6 +50,14 @@ func refresh(g *gocui.Gui, v *gocui.View) error {
 			} else {
 				fmt.Fprintf(v2, "%-30s\n", metadata.Name)
 			}
+			_, cy := v2.Cursor()
+			for _, h := range highlighted {
+				if h == metadata.PubkeyHex {
+					v2.SetHighlight(cy, true)
+				} else {
+					v2.SetHighlight(cy, false)
+				}
+			}
 		}
 		v2.Title = fmt.Sprintf("search: %s (%d results)", searchTerm, resultCount)
 	}
@@ -112,9 +120,11 @@ func refreshV5(g *gocui.Gui, v *gocui.View) error {
 
 	fmt.Fprintf(v5, "%-30s%-30s%-30s%-30s%-30s\n", s, q, f, t, a)
 	ff := fmt.Sprintf("(%s)ollow", fmt.Sprintf(NoticeColor, "f"))
-	u := fmt.Sprintf("(%s)n-follow", fmt.Sprintf(NoticeColor, "u"))
-	m := fmt.Sprintf("(%s)ute", fmt.Sprintf(NoticeColor, "m"))
-	fmt.Fprintf(v5, "%-30s%-30s%-30s\n\n", ff, u, m)
+	u := fmt.Sprintf("<soon>(%s)n-follow", fmt.Sprintf(NoticeColor, "u"))
+	m := fmt.Sprintf("<soon>(%s)ute", fmt.Sprintf(NoticeColor, "m"))
+	z := fmt.Sprintf("(%s)Select ALL", fmt.Sprintf(NoticeColor, "z"))
+	c := fmt.Sprintf("(%s)onfigure keys", fmt.Sprintf(NoticeColor, "c"))
+	fmt.Fprintf(v5, "%-30s%-30s%-30s%-30s%-30s\n\n", ff, u, m, z, c)
 
 	var ac Account
 	var mm Metadata

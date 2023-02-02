@@ -65,6 +65,10 @@ func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("v2", gocui.KeySpace, gocui.ModNone, selectBar); err != nil {
 		log.Panicln(err)
 	}
+	// z key (select all)
+	if err := g.SetKeybinding("v2", rune(0x7a), gocui.ModNone, selectAll); err != nil {
+		log.Panicln(err)
+	}
 	// enter key (ask)
 	if err := g.SetKeybinding("v2", gocui.KeyEnter, gocui.ModNone, askExpand); err != nil {
 		log.Panicln(err)
