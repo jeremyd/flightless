@@ -33,8 +33,7 @@ soon
 ### intro: a look at managing contact lists for multiple accounts
 
 
-https://user-images.githubusercontent.com/4072/216230369-7ee6057e-f945-476e-b3d5-dad865b1294a.mp4
-
+https://user-images.githubusercontent.com/4072/216230921-a1803725-1afc-4b06-8800-c16d81801805.mp4
 
 
 
