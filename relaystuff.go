@@ -97,11 +97,11 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 
 		sinceDisco := rs.LastDisco
 		if sinceDisco.IsZero() {
-			sinceDisco = time.Now().Add(-168 * time.Hour)
+			sinceDisco = time.Now().Add(-72 * time.Hour)
 		}
 		since := rs.LastEOSE
 		if since.IsZero() {
-			since = time.Now().Add(-169 * time.Hour)
+			since = time.Now().Add(-73 * time.Hour)
 		}
 		if sinceDisco.After(since) {
 			since = sinceDisco
