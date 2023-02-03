@@ -123,8 +123,9 @@ func refreshV5(g *gocui.Gui, v *gocui.View) error {
 	u := fmt.Sprintf("<soon>(%s)n-follow", fmt.Sprintf(NoticeColor, "u"))
 	m := fmt.Sprintf("<soon>(%s)ute", fmt.Sprintf(NoticeColor, "m"))
 	z := fmt.Sprintf("(%s)Select ALL", fmt.Sprintf(NoticeColor, "z"))
+	d := fmt.Sprintf("(%s)elete relay", fmt.Sprintf(NoticeColor, "d"))
 	c := fmt.Sprintf("(%s)onfigure keys", fmt.Sprintf(NoticeColor, "c"))
-	fmt.Fprintf(v5, "%-30s%-30s%-30s%-30s%-30s\n\n", ff, u, m, z, c)
+	fmt.Fprintf(v5, "%-30s%-30s%-30s%-30s%-30s%-30s\n\n", ff, u, m, z, d, c)
 
 	var ac Account
 	var mm Metadata

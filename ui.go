@@ -756,6 +756,10 @@ func sanitizeHighlighted(h []string) []string {
 	seen := make(map[string]bool)
 	for _, v := range h {
 		if _, ok := seen[v]; !ok {
+			if !isHex(v) {
+				TheLog.Printf("encountered the bug where non_hex foreign key, skipping")
+				continue
+			}
 			seen[v] = true
 			u = append(u, v)
 		}
@@ -782,6 +786,7 @@ func sanitizeHighlighted(h []string) []string {
 
 	var x []string
 	for _, hi := range u {
+
 		found := false
 		for _, f := range curFollows {
 			if hi == f.PubkeyHex {

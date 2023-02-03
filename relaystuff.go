@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -98,7 +99,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 		}
 		since := rs.LastEOSE
 		if since.IsZero() {
-			since = time.Now().Add(-72 * time.Hour)
+			since = time.Now().Add(-169 * time.Hour)
 		}
 		if sinceDisco.After(since) {
 			since = sinceDisco
@@ -189,7 +190,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				if errEncode == nil {
 					m.PubkeyNpub = npub
 				}
-				m.UpdatedAt = ev.CreatedAt
+				m.MetadataUpdatedAt = ev.CreatedAt
 				if len(m.Picture) > 65535 {
 					//TheLog.Println("too big a picture for profile, skipping" + ev.PubKey)
 					m.Picture = ""
@@ -205,7 +206,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 					}
 					TheLog.Printf("Created metadata for %s, %s\n", m.Name, m.Nip05)
 				} else {
-					if checkMeta.UpdatedAt.After(ev.CreatedAt) {
+					if checkMeta.MetadataUpdatedAt.After(ev.CreatedAt) {
 						//TheLog.Println("skipping old metadata for " + ev.PubKey)
 						continue
 					} else {
@@ -254,7 +255,7 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 						PubkeyHex:    ev.PubKey,
 						TotalFollows: len(allPTags),
 						// set time to january 1st 1970
-						UpdatedAt:         time.Unix(0, 0),
+						MetadataUpdatedAt: time.Unix(0, 0),
 						ContactsUpdatedAt: ev.CreatedAt,
 					}
 					db.Create(&person)
@@ -264,8 +265,8 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 						//TheLog.Printf("skipping old contact list for " + ev.PubKey)
 						continue
 					} else {
-						db.Model(&person).Update("total_follows", len(allPTags))
-						db.Model(&person).Update("contacts_updated_at", ev.CreatedAt)
+						db.Model(&person).Omit("updated_at").Update("total_follows", len(allPTags))
+						db.Model(&person).Omit("updated_at").Update("contacts_updated_at", ev.CreatedAt)
 						//TheLog.Printf("updating (%d) follows for %s: %s\n", len(allPTags), person.Name, person.PubkeyHex)
 					}
 				}
@@ -286,8 +287,14 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 				}
 
 				for _, c := range allPTags {
+					// if the pubkey fails the sanitization (is a hex value) skip it
+					if !sanitizePubkey(c[1]) {
+						TheLog.Println("skipping invalid pubkey from follow list: " + c[1])
+						continue
+					}
 					var followPerson Metadata
 					notFoundFollow := db.First(&followPerson, "pubkey_hex = ?", c[1]).Error
+
 					if notFoundFollow != nil {
 						// follow user not found, need to create it
 						var newUser Metadata
@@ -355,4 +362,30 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 		}
 	}()
 	return true
+}
+
+func sanitizePubkey(s string) bool {
+	// simple but effective
+	return isHex(s)
+}
+
+func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
+	var r RelayStatus
+	if status == "EOSE" {
+		r = RelayStatus{Url: url, Status: status, LastEOSE: time.Now()}
+	} else if strings.HasPrefix(status, "connection error") {
+		// relay received an error, check the time of last error,
+		// if the last error was received before an EOSE, update the disco time, otherwise don't.
+		var lastRelayStatus RelayStatus
+		errLast := db.Where("url = ?", url).First(&lastRelayStatus)
+		if errLast == nil {
+			r = RelayStatus{Url: url, Status: status, LastDisco: time.Now()}
+		}
+	} else {
+		r = RelayStatus{Url: url, Status: status}
+	}
+	rowsUpdated := db.Model(RelayStatus{}).Where("url = ?", url).Updates(&r).RowsAffected
+	if rowsUpdated == 0 {
+		db.Create(&r)
+	}
 }

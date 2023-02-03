@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/awesome-gocui/gocui"
@@ -31,6 +30,7 @@ type Metadata struct {
 	TotalFollows      int
 	UpdatedAt         time.Time `gorm:"autoUpdateTime"`
 	ContactsUpdatedAt time.Time
+	MetadataUpdatedAt time.Time
 	Follows           []*Metadata       `gorm:"many2many:metadata_follows"`
 	Servers           []RecommendServer `gorm:"foreignKey:PubkeyHex;references:PubkeyHex"`
 }
@@ -61,31 +61,6 @@ type Account struct {
 
 type Login struct {
 	PasswordHash string `gorm:"size:43"` //salted and hashed
-}
-
-func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
-	var r RelayStatus
-	if status == "EOSE" {
-		r = RelayStatus{Url: url, Status: status, LastEOSE: time.Now()}
-	} else if strings.HasPrefix(status, "connection error") {
-		// relay received an error, check the time of last error,
-		// if the last error was received before an EOSE, update the disco time, otherwise don't.
-		var lastRelayStatus RelayStatus
-		errLast := db.Where("url = ?", url).First(&lastRelayStatus)
-		if errLast == nil {
-			if lastRelayStatus.LastEOSE.After(lastRelayStatus.LastDisco) {
-				r = RelayStatus{Url: url, Status: status, LastDisco: time.Now()}
-			} else {
-				r = RelayStatus{Url: url, Status: status}
-			}
-		}
-	} else {
-		r = RelayStatus{Url: url, Status: status}
-	}
-	rowsUpdated := db.Model(RelayStatus{}).Where("url = ?", url).Updates(&r).RowsAffected
-	if rowsUpdated == 0 {
-		db.Create(&r)
-	}
 }
 
 var TheLog *log.Logger
