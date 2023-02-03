@@ -92,7 +92,9 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 		}
 
 		// one of the relays complained about >1000 authors.. let's see about capping this
-		allFollow = allFollow[:999]
+		if len(allFollow) >= 1000 {
+			allFollow = allFollow[:999]
+		}
 		TheLog.Printf("initializing relay %s with %d authors\n", url, len(allFollow))
 
 		sinceDisco := rs.LastDisco
