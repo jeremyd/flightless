@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-var AppInfo = "flightless v0.0.4"
+var AppInfo = "flightless v0.0.5"
 
 type Metadata struct {
 	PubkeyHex         string `gorm:"primaryKey;size:65"`
