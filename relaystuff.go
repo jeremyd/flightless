@@ -91,6 +91,8 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 			}
 		}
 
+		// one of the relays complained about >1000 authors.. let's see about capping this
+		allFollow = allFollow[:999]
 		TheLog.Printf("initializing relay %s with %d authors\n", url, len(allFollow))
 
 		sinceDisco := rs.LastDisco
@@ -170,8 +172,10 @@ func doRelay(db *gorm.DB, ctx context.Context, url string) bool {
 		TheLog.Println("exiting gracefully")
 		sub.Unsub()
 		relay.Close()
+
+		UpdateOrCreateRelayStatus(db, relay.URL, "connection error: app exit")
 		// give other relays time to close
-		time.Sleep(1 * time.Second)
+		time.Sleep(3 * time.Second)
 		//os.Exit(0)
 	}()
 
@@ -374,17 +378,11 @@ func UpdateOrCreateRelayStatus(db *gorm.DB, url string, status string) {
 	if status == "EOSE" {
 		r = RelayStatus{Url: url, Status: status, LastEOSE: time.Now()}
 	} else if strings.HasPrefix(status, "connection error") {
-		// relay received an error, check the time of last error,
-		// if the last error was received before an EOSE, update the disco time, otherwise don't.
-		var lastRelayStatus RelayStatus
-		errLast := db.Where("url = ?", url).First(&lastRelayStatus)
-		if errLast == nil {
-			r = RelayStatus{Url: url, Status: status, LastDisco: time.Now()}
-		}
+		r = RelayStatus{Url: url, Status: status, LastDisco: time.Now()}
 	} else {
 		r = RelayStatus{Url: url, Status: status}
 	}
-	rowsUpdated := db.Model(RelayStatus{}).Where("url = ?", url).Updates(&r).RowsAffected
+	rowsUpdated := db.Model(&r).Where("url = ?", url).Updates(&r).RowsAffected
 	if rowsUpdated == 0 {
 		db.Create(&r)
 	}
